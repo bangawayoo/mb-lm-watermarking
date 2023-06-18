@@ -37,6 +37,7 @@ class WatermarkBase:
         delta: float = 2.0,
         seeding_scheme: str = "simple_1",  # simple default, find more schemes in alternative_prf_schemes.py
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
+        message: str = "0000"
     ):
         # patch now that None could now maybe be passed as seeding_scheme
         if seeding_scheme is None:
@@ -53,6 +54,10 @@ class WatermarkBase:
         self._initialize_seeding_scheme(seeding_scheme)
         # Legacy behavior:
         self.select_green_tokens = select_green_tokens
+
+        # parameters for multi-bit
+        self.message = message
+        self.digit = None
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
         """Initialize all internal settings of the seeding strategy from a colloquial, "public" name for the scheme."""

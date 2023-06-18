@@ -11,7 +11,9 @@ RUN apt-get update && \
     vim \
     tmux \
     openssh-server \
-    curl && \
+    curl \
+    build-essential \
+    unzip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

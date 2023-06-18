@@ -78,7 +78,7 @@ def evaluate_p_sp(input1, input2, use_sent_transformers=False):
         print("Pretrained model weights wasn't found, Downloading paraphrase-at-scale-english.zip...")
         print("====================================="*2)
         # Download the zip file
-        subprocess.run(['wget', download_url])
+        # subprocess.run(['wget', download_url])
 
         # Unzip the file
         subprocess.run(['unzip', 'paraphrase-at-scale-english.zip', '-d', download_dir])

@@ -217,46 +217,58 @@ class WatermarkDetector(WatermarkBase):
             # and at each step, compute the greenlist induced by the
             # current prefix and check if the current token falls in the greenlist.
             digit_count = [0 for _ in range(self.message_length)]
-            green_token_count = dict()
-            green_token_mask = dict()
+            green_token_count_cand = dict()
+            green_token_mask_cand = dict()
             for k in [0, 1]:
-                green_token_count[k] = [0 for _ in range(self.message_length)]
-                green_token_mask[k] = [[] for _ in range(self.message_length)]
+                green_token_count_cand[k] = [0 for _ in range(self.message_length)]
+                green_token_mask_cand[k] = [[] for _ in range(self.message_length)]
             for idx in range(self.min_prefix_len, len(input_ids)):
                 curr_token = input_ids[idx]
                 # compute green list given the messasge is 1 and 0
-                greenlist_ids = self._get_greenlist_ids(input_ids[:idx])
-                digit = self.get_current_digit() - 1
+                for k in [0, 1]:
+                    self.message = str(k) * self.message_length
+                    greenlist_ids = self._get_greenlist_ids(input_ids[:idx])
+                    digit = self.get_current_digit() - 1
+                    if curr_token in greenlist_ids:
+                        green_token_count_cand[k][digit] += 1
+                        green_token_mask_cand[k][digit].append(True)
+                    else:
+                        green_token_mask_cand[k][digit].append(False)
                 digit_count[digit] += 1
-                if curr_token in greenlist_ids:
-                    green_token_count[digit] += 1
-                    green_token_mask[digit].append(True)
-                else:
-                    green_token_mask[digit].append(False)
+
+        predicted_msg = []
+        green_token_mask, green_token_count = [], []
+        bit_pos = 0
+        for zero, one in zip(green_token_count_cand[0], green_token_count_cand[1]):
+            pred = int(one > zero)
+            predicted_msg.append(pred)
+            green_token_count.append(green_token_count_cand[pred][bit_pos])
+            green_token_mask.append(green_token_mask_cand[pred][bit_pos])
+            bit_pos += 1
 
         score_dict = dict()
+        score_dict['message'] = "".join(map(lambda x: str(x), predicted_msg))
         if return_num_tokens_scored:
             score_dict.update(dict(num_tokens_scored=num_tokens_scored))
         if return_num_green_tokens:
             score_dict.update(dict(num_green_tokens=green_token_count))
         if return_green_fraction:
-            score_dict.update(dict(green_fraction=[gt / num_tokens_scored for gt in green_token_count]))
+            # score_dict.update(dict(green_fraction=[gt / num_tokens_scored for gt in green_token_count]))
+            score_dict.update(dict(green_fraction=sum(green_token_count) / num_tokens_scored))
         if return_z_score:
-            for dig, gt in enumerate(green_token_count):
-                score_dict.update({f'z_score_{dig}': self._compute_z_score(gt, digit_count[dig])})
-            score_dict.update({f'z_score': self._compute_z_score(gt, digit_count[dig])})
+            for pos, tok_cnt in enumerate(green_token_count):
+                score_dict.update({f'z_score_{pos}': self._compute_z_score(tok_cnt, digit_count[pos])})
+            # score_dict.update({f'z_score': self._compute_z_score(tok_cnt, digit_count[pos])})
         if return_p_value:
-            for dig, _ in enumerate(green_token_count):
-                z_score = score_dict.get(f"z_score_{dig}")
-                score_dict.update({f'p_value_{dig}': self._compute_p_value(z_score)})
-            score_dict.update({f'p_value': self._compute_p_value(z_score)})
+            for pos, _ in enumerate(green_token_count):
+                z_score = score_dict.get(f"z_score_{pos}")
+                score_dict.update({f'p_value_{pos}': self._compute_p_value(z_score)})
+            # score_dict.update({f'p_value': self._compute_p_value(z_score)})
 
         if return_green_token_mask:
             score_dict.update(dict(green_token_mask=green_token_mask))
 
         print(score_dict)
-        print(digit_count)
-        breakpoint()
         return score_dict
 
     def detect(
@@ -302,9 +314,10 @@ class WatermarkDetector(WatermarkBase):
         if return_prediction:
             z_threshold = z_threshold if z_threshold else self.z_threshold
             assert z_threshold is not None, "Need a threshold in order to decide outcome of detection test"
-            output_dict["prediction"] = score_dict["z_score"] > z_threshold
-            if output_dict["prediction"]:
-                output_dict["confidence"] = 1 - score_dict["p_value"]
+            for pos in range(self.message_length):
+                output_dict[f"prediction_{pos}"] = score_dict[f"z_score_{pos}"] > z_threshold
+                if output_dict[f"prediction_{pos}"]:
+                    output_dict[f"confidence_{pos}"] = 1 - score_dict[f"p_value_{pos}"]
 
         return output_dict
 

@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from types import NoneType
+# NoneType is deprecated
+# from types import NoneType
+NoneType = type(None)
 
 from typing import Union
 import os
@@ -1201,7 +1203,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--wandb_entity",
         type=str,
-        default="jwkirchenbauer",
+        default="banga",
         help="The wandb entity/user for the project.",
     )
     parser.add_argument(

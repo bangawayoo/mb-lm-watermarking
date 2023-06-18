@@ -4,3 +4,8 @@ scipy
 torch
 transformers
 tokenizers
+accelerate
+wandb
+datasets
+sacremoses
+sentencepiece

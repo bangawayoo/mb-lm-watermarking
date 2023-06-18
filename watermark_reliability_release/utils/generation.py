@@ -87,6 +87,9 @@ def load_model(args):
         tokenizer = AutoTokenizer.from_pretrained(
             args.model_name_or_path, padding_side=padding_side
         )
+        # for GPT2 and other variants that do not have padding tokens
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
 
     args.model_max_length = model.config.max_position_embeddings
 

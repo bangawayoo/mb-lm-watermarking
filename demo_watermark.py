@@ -30,7 +30,7 @@ from transformers import (AutoTokenizer,
                           AutoModelForCausalLM,
                           LogitsProcessorList)
 
-from watermark_processor import WatermarkLogitsProcessor, WatermarkDetector
+from mb_watermark_processor import WatermarkLogitsProcessor, WatermarkDetector
 
 def str2bool(v):
     """Util function for user friendly boolean flag args"""
@@ -206,12 +206,13 @@ def generate(prompt, args, model=None, device=None, tokenizer=None):
        as a logits processor. """
     
     print(f"Generating with {args}")
-
     watermark_processor = WatermarkLogitsProcessor(vocab=list(tokenizer.get_vocab().values()),
                                                     gamma=args.gamma,
                                                     delta=args.delta,
                                                     seeding_scheme=args.seeding_scheme,
-                                                    select_green_tokens=args.select_green_tokens)
+                                                    select_green_tokens=args.select_green_tokens,
+                                                    message=args.message,
+                                                   )
 
     gen_kwargs = dict(max_new_tokens=args.max_new_tokens)
 
@@ -299,6 +300,7 @@ def list_format_scores(score_dict, detection_threshold):
         lst_2d.insert(-2,["z-score Threshold", f"{detection_threshold}"])
     else:
         lst_2d.insert(-1,["z-score Threshold", f"{detection_threshold}"])
+
     return lst_2d
 
 def detect(input_text, args, device=None, tokenizer=None):
@@ -312,7 +314,9 @@ def detect(input_text, args, device=None, tokenizer=None):
                                         z_threshold=args.detection_z_threshold,
                                         normalizers=args.normalizers,
                                         ignore_repeated_bigrams=args.ignore_repeated_bigrams,
-                                        select_green_tokens=args.select_green_tokens)
+                                        select_green_tokens=args.select_green_tokens,
+                                        message_length=args.message_length
+                                           )
     if len(input_text)-1 > watermark_detector.min_prefix_len:
         score_dict = watermark_detector.detect(input_text)
         # output = str_format_scores(score_dict, watermark_detector.z_threshold)
@@ -347,7 +351,7 @@ def run_gradio(args, model=None, device=None, tokenizer=None):
             #     pass
             # ![visitor badge](https://visitor-badge.glitch.me/badge?page_id=tomg-group-umd_lm-watermarking) # buggy
 
-        with gr.Accordion("Understanding the output metrics",open=False):
+        with gr.Accordion("Understanding the output metrics", open=False):
             gr.Markdown(
             """
             - `z-score threshold` : The cuttoff for the hypothesis test
@@ -368,11 +372,11 @@ def run_gradio(args, model=None, device=None, tokenizer=None):
             """
             )
 
-        with gr.Accordion("A note on model capability",open=True):
+        with gr.Accordion("A note on model capability", open=True):
             gr.Markdown(
                 """
-                This demo uses open-source language models that fit on a single GPU. These models are less powerful than proprietary commercial tools like ChatGPT, Claude, or Bard. 
-
+                This demo uses open-source language models that fit on a single GPU. 
+                These models are less powerful than proprietary commercial tools like ChatGPT, Claude, or Bard. 
                 Importantly, we use a language model that is designed to "complete" your prompt, and not a model this is fine-tuned to follow instructions. 
                 For best results, prompt the model with a few sentences that form the beginning of a paragraph, and then allow it to "continue" your paragraph. 
                 Some examples include the opening paragraph of a wikipedia article, or the first few sentences of a story. 
@@ -386,9 +390,8 @@ def run_gradio(args, model=None, device=None, tokenizer=None):
         session_args = gr.State(value=args)
 
         with gr.Tab("Generate and Detect"):
-            
             with gr.Row():
-                prompt = gr.Textbox(label=f"Prompt", interactive=True,lines=10,max_lines=10, value=default_prompt)
+                prompt = gr.Textbox(label=f"Prompt", interactive=True, lines=10, max_lines=10, value=default_prompt)
             with gr.Row():
                 generate_btn = gr.Button("Generate")
             with gr.Row():
@@ -626,6 +629,9 @@ def main(args):
         model, tokenizer, device = None, None, None
 
     # Generate and detect, report to stdout
+    args.message = "00001111"
+    args.message_length = len(args.message)
+
     if not args.skip_model_load:
         input_text = (
         "The diamondback terrapin or simply terrapin (Malaclemys terrapin) is a "
@@ -662,9 +668,9 @@ def main(args):
                                                                                             model=model, 
                                                                                             device=device, 
                                                                                             tokenizer=tokenizer)
-        without_watermark_detection_result = detect(decoded_output_without_watermark, 
-                                                    args, 
-                                                    device=device, 
+        without_watermark_detection_result = detect(decoded_output_without_watermark,
+                                                    args,
+                                                    device=device,
                                                     tokenizer=tokenizer)
         with_watermark_detection_result = detect(decoded_output_with_watermark, 
                                                  args, 

@@ -554,7 +554,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--wandb_entity",
         type=str,
-        default="jwkirchenbauer",
+        default="banga",
         help="The wandb entity/user for the project.",
     )
     parser.add_argument(
