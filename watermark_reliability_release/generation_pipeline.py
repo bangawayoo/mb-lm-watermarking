@@ -32,7 +32,7 @@ from utils.submitit import str2bool
 from utils.io import write_jsonlines, write_json
 
 # watermarking functionality
-from watermark_processor import WatermarkLogitsProcessor
+from mb_watermark_processor import WatermarkLogitsProcessor
 
 # generation pipeline helpers
 from utils.generation import (

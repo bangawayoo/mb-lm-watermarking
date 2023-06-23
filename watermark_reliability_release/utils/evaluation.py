@@ -35,7 +35,7 @@ from utils.hypothesis_testing import (
     T_and_F_runs_dummy_dict_no_bins,
 )
 
-from watermark_processor import WatermarkDetector
+from mb_watermark_processor import WatermarkDetector
 
 # These areguments are ignored when doing checks between meta file and cmdline args
 NO_CHECK_ARGS = [

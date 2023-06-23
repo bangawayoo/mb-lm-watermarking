@@ -19,6 +19,7 @@ import collections
 from math import sqrt
 from itertools import chain, tee
 from functools import lru_cache
+import random
 
 import scipy.stats
 import torch
@@ -37,7 +38,8 @@ class WatermarkBase:
         delta: float = 2.0,
         seeding_scheme: str = "simple_1",  # simple default, find more schemes in alternative_prf_schemes.py
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
-        message: str = "0000"
+
+        message: str = "1100"
     ):
         # patch now that None could now maybe be passed as seeding_scheme
         if seeding_scheme is None:
@@ -57,7 +59,7 @@ class WatermarkBase:
 
         # parameters for multi-bit
         self.message = message
-        self.digit = None
+        self.bit_position = None
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
         """Initialize all internal settings of the seeding strategy from a colloquial, "public" name for the scheme."""
@@ -76,8 +78,13 @@ class WatermarkBase:
         prf_key = prf_lookup[self.prf_type](
             input_ids[-self.context_width :], salt_key=self.hash_key
         )
+        # determine bit position
+        random.seed(prf_key % (2**64 - 1))
+        # select the position
+        self.bit_position = random.randint(1, len(self.message))
+        bit = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
-        self.rng.manual_seed(prf_key % (2**64 - 1))  # safeguard against overflow from long
+        self.rng.manual_seed(prf_key % (2**64 - 1) + bit)  # safeguard against overflow from long
 
     def _get_greenlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         """Seed rng based on local context width and use this information to generate ids on the green list."""
@@ -94,6 +101,12 @@ class WatermarkBase:
                 (self.vocab_size - greenlist_size) :
             ]  # legacy behavior
         return greenlist_ids
+
+    def get_current_bit(self, bit_position):
+        return int(self.message[bit_position - 1])
+
+    def get_current_position(self):
+        return self.bit_position
 
 
 class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
@@ -246,6 +259,7 @@ class WatermarkDetector(WatermarkBase):
         z_threshold: float = 4.0,
         normalizers: list[str] = ["unicode"],  # or also: ["unicode", "homoglyphs", "truecase"]
         ignore_repeated_ngrams: bool = False,
+        message_length: int = 4,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -262,6 +276,9 @@ class WatermarkDetector(WatermarkBase):
         for normalization_strategy in normalizers:
             self.normalizers.append(normalization_strategy_lookup(normalization_strategy))
         self.ignore_repeated_ngrams = ignore_repeated_ngrams
+
+        self.message_length = message_length
+        self.message = None
 
     def dummy_detect(
         self,
@@ -325,11 +342,12 @@ class WatermarkDetector(WatermarkBase):
         return p_value
 
     @lru_cache(maxsize=2**32)
-    def _get_ngram_score_cached(self, prefix: tuple[int], target: int):
+    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, messsage: str):
         """Expensive re-seeding and sampling is cached."""
+        self.message = messsage
         # Handle with care, should ideally reset on __getattribute__ access to self.prf_type, self.context_width, self.self_salt, self.hash_key
         greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
-        return True if target in greenlist_ids else False
+        return True if target in greenlist_ids else False, self.get_current_position()
 
     def _score_ngrams_in_passage(self, input_ids: torch.Tensor):
         """Core function to gather all ngrams in the input and compute their watermark."""
@@ -344,13 +362,41 @@ class WatermarkDetector(WatermarkBase):
             input_ids.cpu().tolist(), self.context_width + 1 - self.self_salt
         )
         frequencies_table = collections.Counter(token_ngram_generator)
-        ngram_to_watermark_lookup = {}
+        from collections import defaultdict
+        ngram_to_watermark_lookup = defaultdict(list)
+        ngram_to_position_lookup = {}
+        green_cnt_by_position = {i: [0, 0] for i in range(1, self.message_length + 1)}
         for idx, ngram_example in enumerate(frequencies_table.keys()):
             prefix = ngram_example if self.self_salt else ngram_example[:-1]
             target = ngram_example[-1]
-            ngram_to_watermark_lookup[ngram_example] = self._get_ngram_score_cached(prefix, target)
+            for m in [0, 1]:
+                message = str(m) * self.message_length
+                greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, message)
+                ngram_to_watermark_lookup[ngram_example].append(greenlist_flag)
+                ngram_to_position_lookup[ngram_example] = current_position
+                if greenlist_flag:
+                    green_cnt_by_position[current_position][m] += 1
 
-        return ngram_to_watermark_lookup, frequencies_table
+        msg_prediciton = []
+        # TODO: save discrepency of two hypothesis for later use
+        for pos in range(1, self.message_length+1):
+            if green_cnt_by_position[pos][1] > green_cnt_by_position[pos][0]:
+                pred = 1
+            else:
+                pred = 0
+            msg_prediciton.append(pred)
+
+        print(msg_prediciton)
+
+        for ngram, green_token in ngram_to_watermark_lookup.items():
+            pos = ngram_to_position_lookup[ngram]
+            bit = msg_prediciton[pos-1]
+            ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][bit]
+
+
+        # print(ngram_to_watermark_lookup)
+        # breakpoint()
+        return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup
 
     def _get_green_at_T_booleans(self, input_ids, ngram_to_watermark_lookup) -> tuple[torch.Tensor]:
         """Generate binary list of green vs. red per token, a separate list that ignores repeated ngrams, and a list of offsets to
@@ -392,10 +438,13 @@ class WatermarkDetector(WatermarkBase):
         return_z_at_T: bool = True,
         return_p_value: bool = True,
     ):
-        ngram_to_watermark_lookup, frequencies_table = self._score_ngrams_in_passage(input_ids)
+        ngram_to_watermark_lookup, frequencies_table, ngram_to_digit_lookup \
+            = self._score_ngrams_in_passage(input_ids)
         green_token_mask, green_unique, offsets = self._get_green_at_T_booleans(
             input_ids, ngram_to_watermark_lookup
         )
+
+        # green_token_count_by_digit = {i: 0 for i in range(1, self.message_length + 1)}
 
         # Count up scores over all ngrams
         if self.ignore_repeated_ngrams:
