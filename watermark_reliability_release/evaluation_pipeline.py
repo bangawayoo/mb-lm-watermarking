@@ -349,7 +349,6 @@ def main(args):
         gen_table_w_zscore_ds = gen_table_w_ppl_ds.map(
             compute_z_scores_partial, **map_setup, desc="Computing z-scores"
         )
-
     else:
         gen_table_w_zscore_ds = gen_table_w_ppl_ds
 
@@ -474,6 +473,8 @@ def main(args):
                 .groupby("prefix_length")["w_wm_output_attacked_retrieval_score"]
                 .describe()
             )
+
+
 
     ###########################################################################
     # Detectgpt detection
@@ -1275,6 +1276,18 @@ if __name__ == "__main__":
         type=str2bool,
         default=True,
         help="Whether to log the raw tabular metric data to wandb.",
+    )
+    parser.add_argument(
+        "--message_length",
+        type=int,
+        default=4,
+        help="Number of bits of message to watermark",
+    )
+    parser.add_argument(
+        "--message_seed",
+        type=int,
+        default=78,
+        help="Seed for randomly sampling message of specified length",
     )
     args = parser.parse_args()
 

@@ -36,6 +36,7 @@ from utils.hypothesis_testing import (
 )
 
 from mb_watermark_processor import WatermarkDetector
+# from watermark_processor import WatermarkDetector
 
 # These areguments are ignored when doing checks between meta file and cmdline args
 NO_CHECK_ARGS = [
@@ -176,6 +177,8 @@ def load_detector(args):
         z_threshold=args.detection_z_threshold,
         normalizers=args.normalizers,
         ignore_repeated_ngrams=args.ignore_repeated_ngrams,
+        message_length=args.message_length,
+        message_seed=args.message_seed
     )
 
     return watermark_detector

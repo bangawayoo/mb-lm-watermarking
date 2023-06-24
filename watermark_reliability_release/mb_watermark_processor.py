@@ -38,7 +38,8 @@ class WatermarkBase:
         delta: float = 2.0,
         seeding_scheme: str = "simple_1",  # simple default, find more schemes in alternative_prf_schemes.py
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
-
+        message_length: int = 4,
+        message_seed: int = 78,
         message: str = "1100"
     ):
         # patch now that None could now maybe be passed as seeding_scheme
@@ -57,8 +58,13 @@ class WatermarkBase:
         # Legacy behavior:
         self.select_green_tokens = select_green_tokens
 
-        # parameters for multi-bit
-        self.message = message
+        # parameters for multi-bit watermarking
+        if message_length and message_seed is not None:
+            random.seed(message_seed)
+            sampled_bits = [random.randint(0, 1) for _ in range(message_length)]
+            self.message = "".join(map(str, sampled_bits))
+        else:
+            self.message = message
         self.bit_position = None
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
@@ -276,9 +282,7 @@ class WatermarkDetector(WatermarkBase):
         for normalization_strategy in normalizers:
             self.normalizers.append(normalization_strategy_lookup(normalization_strategy))
         self.ignore_repeated_ngrams = ignore_repeated_ngrams
-
         self.message_length = message_length
-        self.message = None
 
     def dummy_detect(
         self,
@@ -293,9 +297,12 @@ class WatermarkDetector(WatermarkBase):
         return_z_score: bool = True,
         return_z_at_T: bool = True,
         return_p_value: bool = True,
+        return_bit_match: bool = True,
     ):
         # HF-style output dictionary
         score_dict = dict()
+        if return_bit_match:
+            score_dict.update(dict(bit_acc=float("nan")))
         if return_num_tokens_scored:
             score_dict.update(dict(num_tokens_scored=float("nan")))
         if return_num_green_tokens:
@@ -362,10 +369,10 @@ class WatermarkDetector(WatermarkBase):
             input_ids.cpu().tolist(), self.context_width + 1 - self.self_salt
         )
         frequencies_table = collections.Counter(token_ngram_generator)
-        from collections import defaultdict
-        ngram_to_watermark_lookup = defaultdict(list)
+        ngram_to_watermark_lookup = collections.defaultdict(list)
         ngram_to_position_lookup = {}
         green_cnt_by_position = {i: [0, 0] for i in range(1, self.message_length + 1)}
+
         for idx, ngram_example in enumerate(frequencies_table.keys()):
             prefix = ngram_example if self.self_salt else ngram_example[:-1]
             target = ngram_example[-1]
@@ -377,28 +384,9 @@ class WatermarkDetector(WatermarkBase):
                 if greenlist_flag:
                     green_cnt_by_position[current_position][m] += 1
 
-        msg_prediciton = []
-        # TODO: save discrepency of two hypothesis for later use
-        for pos in range(1, self.message_length+1):
-            if green_cnt_by_position[pos][1] > green_cnt_by_position[pos][0]:
-                pred = 1
-            else:
-                pred = 0
-            msg_prediciton.append(pred)
+        return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position
 
-        print(msg_prediciton)
-
-        for ngram, green_token in ngram_to_watermark_lookup.items():
-            pos = ngram_to_position_lookup[ngram]
-            bit = msg_prediciton[pos-1]
-            ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][bit]
-
-
-        # print(ngram_to_watermark_lookup)
-        # breakpoint()
-        return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup
-
-    def _get_green_at_T_booleans(self, input_ids, ngram_to_watermark_lookup) -> tuple[torch.Tensor]:
+    def _get_green_at_T_booleans(self, input_ids, ngram_to_watermark_lookup) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Generate binary list of green vs. red per token, a separate list that ignores repeated ngrams, and a list of offsets to
         convert between both representations:
         green_token_mask = green_token_mask_unique[offsets] except for all locations where otherwise a repeat would be counted
@@ -421,11 +409,10 @@ class WatermarkDetector(WatermarkBase):
                 green_token_mask_unique.append(ngram_to_watermark_lookup[ngram_example])
                 unique_ngram_idx += 1
             offsets.append(unique_ngram_idx - 1)
-        return (
-            torch.tensor(green_token_mask),
-            torch.tensor(green_token_mask_unique),
-            torch.tensor(offsets),
-        )
+        return (torch.tensor(green_token_mask),
+                torch.tensor(green_token_mask_unique),
+                torch.tensor(offsets),
+                )
 
     def _score_sequence(
         self,
@@ -437,14 +424,28 @@ class WatermarkDetector(WatermarkBase):
         return_z_score: bool = True,
         return_z_at_T: bool = True,
         return_p_value: bool = True,
+        return_bit_match: bool = True,
     ):
-        ngram_to_watermark_lookup, frequencies_table, ngram_to_digit_lookup \
+        ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position \
             = self._score_ngrams_in_passage(input_ids)
+
+        position_cnt = collections.Counter(ngram_to_position_lookup.values())
+        msg_prediction = []
+        for pos in range(1, self.message_length + 1):
+            one_Gt_cnt, zero_Gt_cnt = green_cnt_by_position[pos][1], green_cnt_by_position[pos][0]
+            ratio = max(one_Gt_cnt, zero_Gt_cnt) / position_cnt[pos]
+            pred = 1 if one_Gt_cnt > zero_Gt_cnt else 0
+            msg_prediction.append(pred)
+        matched_bits, total_bits = self._compute_ber(msg_prediction)
+
+        for ngram, green_token in ngram_to_watermark_lookup.items():
+            pos = ngram_to_position_lookup[ngram]
+            bit = msg_prediction[pos - 1]
+            ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][bit]
+
         green_token_mask, green_unique, offsets = self._get_green_at_T_booleans(
             input_ids, ngram_to_watermark_lookup
         )
-
-        # green_token_count_by_digit = {i: 0 for i in range(1, self.message_length + 1)}
 
         # Count up scores over all ngrams
         if self.ignore_repeated_ngrams:
@@ -465,9 +466,10 @@ class WatermarkDetector(WatermarkBase):
                 )
             )
         assert green_token_count == green_unique.sum()
-
         # HF-style output dictionary
         score_dict = dict()
+        if return_bit_match:
+            score_dict.update(dict(bit_acc=matched_bits / total_bits))
         if return_num_tokens_scored:
             score_dict.update(dict(num_tokens_scored=num_tokens_scored))
         if return_num_green_tokens:
@@ -614,12 +616,23 @@ class WatermarkDetector(WatermarkBase):
             z_score = score_dict.get("z_score", optimal_z)
             score_dict.update(dict(p_value=self._compute_p_value(z_score)))
 
+
         # Return per-token results for mask. This is still the same, just scored by windows
         # todo would be to mark the actually counted tokens differently
         if return_green_token_mask:
             score_dict.update(dict(green_token_mask=green_mask.tolist()))
 
         return score_dict
+
+    def _compute_ber(self, pred_msg: list):
+        pred_msg = "".join(map(str, pred_msg))
+        match = 0
+        total = 0
+        for g, p in zip(self.message, pred_msg):
+            if g == p:
+                match += 1
+            total += 1
+        return match, total
 
     def detect(
         self,

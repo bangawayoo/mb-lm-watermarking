@@ -6,31 +6,45 @@ export HF_HOME=$HF_DATASETS_CACHE
 # requires some OUTPUT_DIR to be set in the environment
 # as well as a path to the hf format LLAMA model
 
-RUN_NAME=tmp
-OUTPUT_DIR=test_sb
+# logging
+RUN_NAME=sb_module
+OUTPUT_DIR=debug
 WANDB=T
 
+# experiment types
+RUN_GEN=T
+RUN_ATT=T
+RUN_EVAL=T
+
+
+#generation related
 MODEL_PATH="facebook/opt-1.3b"
 MODEL_PATH="gpt2"
+MIN_GEN=30
+SAMPLING=True
+TOKEN_LEN=200
 
-MIN_GEN=10
+# watermarking related
 SEED_SCH="selfhash"
 GAMMA=0.25
 DELTA=2.0
-SAMPLING=True
+MSG_LEN=1
+MSG_SEED=1230
+
+# attack related
+ATTACK_M=copy-paste
 
 GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
 echo "Running generation pipeline with output dir: $GENERATION_OUTPUT_DIR"
 
-RUN_GEN=T
 if [ $RUN_GEN == T ]; then
   python generation_pipeline.py \
       --model_name=$MODEL_PATH \
       --dataset_name=c4 \
       --dataset_config_name=realnewslike \
-      --max_new_tokens=500 \
+      --max_new_tokens=$TOKEN_LEN \
       --min_prompt_tokens=50 \
-      --limit_indices 1000 \
+      --limit_indices=1000 \
       --min_generations=$MIN_GEN \
       --input_truncation_strategy=completion_length \
       --input_filtering_strategy=prompt_and_completion_length \
@@ -43,24 +57,22 @@ if [ $RUN_GEN == T ]; then
       --wandb=$WANDB \
       --verbose=True \
       --output_dir=$GENERATION_OUTPUT_DIR \
-      --overwrite T
+      --overwrite T \
+      --message_length=$MSG_LEN \
+      --message_seed=$MSG_SEED
 fi
 
-
-ATTACK_M=copy-paste
-
-RUN_ATT=T
 if [ $RUN_ATT == T ]; then
   python attack_pipeline.py \
       --attack_method=$ATTACK_M \
       --run_name="$RUN_NAME"_gpt_attack \
       --wandb=$WANDB \
+      --cp_attack_insertion_len 25% \
+      --cp_attack_type triple-single \
       --input_dir=$GENERATION_OUTPUT_DIR \
       --verbose=True --overwrite_output_file T
 fi
 
-
-RUN_EVAL=T
 if [ $RUN_EVAL == T ]; then
   python evaluation_pipeline.py \
       --evaluation_metrics=all \
@@ -69,5 +81,7 @@ if [ $RUN_EVAL == T ]; then
       --input_dir=$GENERATION_OUTPUT_DIR \
       --output_dir="$GENERATION_OUTPUT_DIR"_eval \
       --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
-      --evaluation_metrics "z-score"
+      --evaluation_metrics "z-score" \
+      --message_length=$MSG_LEN \
+      --message_seed=$MSG_SEED
 fi
