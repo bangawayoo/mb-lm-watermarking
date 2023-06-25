@@ -7,12 +7,12 @@ export HF_HOME=$HF_DATASETS_CACHE
 # as well as a path to the hf format LLAMA model
 
 # logging
-RUN_NAME=sb_module
-OUTPUT_DIR=debug
+RUN_NAME=multi_bit-T600
+OUTPUT_DIR=test
 WANDB=T
 
 # experiment types
-RUN_GEN=T
+RUN_GEN=F
 RUN_ATT=T
 RUN_EVAL=T
 
@@ -20,16 +20,16 @@ RUN_EVAL=T
 #generation related
 MODEL_PATH="facebook/opt-1.3b"
 MODEL_PATH="gpt2"
-MIN_GEN=30
+MIN_GEN=500
 SAMPLING=True
-TOKEN_LEN=200
+TOKEN_LEN=600
+BS=1
 
 # watermarking related
 SEED_SCH="selfhash"
 GAMMA=0.25
 DELTA=2.0
-MSG_LEN=1
-MSG_SEED=1230
+MSG_LEN=4
 
 # attack related
 ATTACK_M=copy-paste
@@ -44,7 +44,7 @@ if [ $RUN_GEN == T ]; then
       --dataset_config_name=realnewslike \
       --max_new_tokens=$TOKEN_LEN \
       --min_prompt_tokens=50 \
-      --limit_indices=1000 \
+      --limit_indices=5000 \
       --min_generations=$MIN_GEN \
       --input_truncation_strategy=completion_length \
       --input_filtering_strategy=prompt_and_completion_length \
@@ -59,7 +59,7 @@ if [ $RUN_GEN == T ]; then
       --output_dir=$GENERATION_OUTPUT_DIR \
       --overwrite T \
       --message_length=$MSG_LEN \
-      --message_seed=$MSG_SEED
+      --generation_batch_size=$BS
 fi
 
 if [ $RUN_ATT == T ]; then
@@ -83,5 +83,5 @@ if [ $RUN_EVAL == T ]; then
       --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
       --evaluation_metrics "z-score" \
       --message_length=$MSG_LEN \
-      --message_seed=$MSG_SEED
+      --target_T=$TOKEN_LEN
 fi

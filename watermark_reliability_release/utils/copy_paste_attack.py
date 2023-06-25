@@ -28,7 +28,6 @@ def triple_insertion_single_len(
     tokenized_w_wm_output,  # src
 ):
     tmp_attack_lens = (attack_len, attack_len, attack_len)
-
     while True:
         rand_insert_locs = torch.randint(low=0, high=min_token_count, size=(len(tmp_attack_lens),))
         _, indices = torch.sort(rand_insert_locs)

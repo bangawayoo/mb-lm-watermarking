@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import torch
 
 # HF classes
@@ -462,6 +463,14 @@ def generate(
 ):
     input_ids = collate_batch(input_ids=examples["input_ids"], collator=data_collator).to(device)
 
+    # Sample multi-bit message: a batch will have the same message due to how the watermark processor operates.
+    # This won't be an issue hopefully when the number of samples is adequately big
+    msg_length = args.message_length
+    msg_decimal = random.getrandbits(msg_length)
+    msg_binary = format(msg_decimal, f"0{msg_length}b")
+    watermark_processor.message = msg_binary
+    messages = [msg_binary] * len(examples['input_ids'])
+
     with torch.no_grad():
         if args.generation_seed is not None:
             torch.manual_seed(args.generation_seed)
@@ -482,10 +491,20 @@ def generate(
     decoded_output_with_watermark = tokenizer.batch_decode(
         output_with_watermark, skip_special_tokens=True
     )
+    #
+    # # make sure empty strings do not exist. This will make the input id columns dtype to be converted float
+    # # due to the Dataset formatting
+    # for idx in range(len(decoded_output_with_watermark)):
+    #     if len(decoded_output_without_watermark[idx]):
+    #         decoded_output_without_watermark[idx] = " "
+    #     if len(decoded_output_with_watermark[idx]):
+    #         decoded_output_with_watermark[idx] = " "
+
     examples.update(
         {
             "no_wm_output": decoded_output_without_watermark,
             "w_wm_output": decoded_output_with_watermark,
+            "message": messages,
             "no_wm_output_length": (output_without_watermark != tokenizer.pad_token_id)
             .sum(dim=-1)
             .tolist(),
@@ -494,7 +513,6 @@ def generate(
             .tolist(),
         }
     )
-
     if watermark_processor.spike_entropies is not None:
         examples["spike_entropies"] = watermark_processor._get_and_clear_stored_spike_ents()
         examples["spike_entropies"] = [

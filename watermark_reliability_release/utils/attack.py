@@ -134,6 +134,10 @@ def copy_paste_attack(example, tokenizer=None, args=None):
     tokenized_dst = example[f"{args.cp_attack_dst_col}_tokd"]
     tokenized_src = example[f"{args.cp_attack_src_col}_tokd"]
     min_token_count = min(len(tokenized_dst), len(tokenized_src))
+    # input ids might have been converted to float if empty rows exist
+    for key in example.keys():
+        if "tokd" in key:
+            example[key] = list(map(int, example[key]))
 
     if args.cp_attack_type == "single-single":  # 1-t
         tokenized_attacked_output = single_insertion(

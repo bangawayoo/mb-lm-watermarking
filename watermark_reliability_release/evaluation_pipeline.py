@@ -579,7 +579,6 @@ def main(args):
         lower_tolerance = args.lower_tolerance_T
         upper_tolerance = args.upper_tolerance_T
         filtered_table = gen_table_w_metrics_ds.to_pandas()  # explictly convert lists
-
         for col in args.filter_by_columns:
             length_col_name = infer_length_column(col, filtered_table, args=args)
             filtered_table = filter_text_col_length(
@@ -1282,12 +1281,6 @@ if __name__ == "__main__":
         type=int,
         default=4,
         help="Number of bits of message to watermark",
-    )
-    parser.add_argument(
-        "--message_seed",
-        type=int,
-        default=78,
-        help="Seed for randomly sampling message of specified length",
     )
     args = parser.parse_args()
 

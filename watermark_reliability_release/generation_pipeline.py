@@ -160,8 +160,6 @@ def main(args):
         seeding_scheme=args.seeding_scheme,
         store_spike_ents=args.store_spike_ents,
         select_green_tokens=True,
-        message_length=args.message_length,
-        message_seed=args.message_seed,
     )
 
     ###########################################################################
@@ -589,12 +587,6 @@ if __name__ == "__main__":
         type=int,
         default=4,
         help="Number of bits of message to watermark",
-    )
-    parser.add_argument(
-        "--message_seed",
-        type=int,
-        default=78,
-        help="Seed for randomly sampling message of specified length",
     )
     args = parser.parse_args()
 

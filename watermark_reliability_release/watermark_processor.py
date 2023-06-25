@@ -37,6 +37,7 @@ class WatermarkBase:
         delta: float = 2.0,
         seeding_scheme: str = "simple_1",  # simple default, find more schemes in alternative_prf_schemes.py
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
+        **kwargs
     ):
         # patch now that None could now maybe be passed as seeding_scheme
         if seeding_scheme is None:

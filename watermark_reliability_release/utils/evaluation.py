@@ -110,6 +110,7 @@ MAUVE_TEXT_PAIR_COLUMN_NAMES = OUTPUT_TEXT_PAIR_COLUMN_NAMES
 
 ROC_TEST_STAT_SUFFIXES = [
     "z_score",
+    "z_score_max",
     "win20-1_z_score",
     "win40-1_z_score",
     "winmax-1_z_score",
@@ -178,7 +179,6 @@ def load_detector(args):
         normalizers=args.normalizers,
         ignore_repeated_ngrams=args.ignore_repeated_ngrams,
         message_length=args.message_length,
-        message_seed=args.message_seed
     )
 
     return watermark_detector
@@ -212,10 +212,15 @@ def compute_z_score(
                 return_prediction=False,  # this conversion to "decision" only desired in demo context
                 convert_to_float=True,  # this helps with integrity under NaNs
                 return_z_at_T=args.compute_scores_at_T,
+                message=example['message']
             )
-        except Exception as e:
-            print(e)
+        except ValueError as err:
+            print(err)
             error = True
+        except Exception as err:
+            print(err)
+            error = True
+
     if error:
         problem_text = f"'{input_text[:40]} {'[...]' if len(input_text) > 40 else ''}'"
         if args.verbose:

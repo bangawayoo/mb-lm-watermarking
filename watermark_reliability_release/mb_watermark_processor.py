@@ -38,9 +38,6 @@ class WatermarkBase:
         delta: float = 2.0,
         seeding_scheme: str = "simple_1",  # simple default, find more schemes in alternative_prf_schemes.py
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
-        message_length: int = 4,
-        message_seed: int = 78,
-        message: str = "1100"
     ):
         # patch now that None could now maybe be passed as seeding_scheme
         if seeding_scheme is None:
@@ -59,12 +56,7 @@ class WatermarkBase:
         self.select_green_tokens = select_green_tokens
 
         # parameters for multi-bit watermarking
-        if message_length and message_seed is not None:
-            random.seed(message_seed)
-            sampled_bits = [random.randint(0, 1) for _ in range(message_length)]
-            self.message = "".join(map(str, sampled_bits))
-        else:
-            self.message = message
+        self.message = None
         self.bit_position = None
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
@@ -209,6 +201,10 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
                 pass  # do not break early
         return torch.as_tensor(final_greenlist, device=input_ids.device)
 
+    def set_message(self, message):
+        """called before generating each batch"""
+        self.message = message
+
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         """Call with previous context as input_ids, and scores for next token."""
 
@@ -298,9 +294,12 @@ class WatermarkDetector(WatermarkBase):
         return_z_at_T: bool = True,
         return_p_value: bool = True,
         return_bit_match: bool = True,
+        return_z_score_max: bool = True
     ):
         # HF-style output dictionary
         score_dict = dict()
+        if return_z_score_max:
+            score_dict.update(dict(z_score_max=float("nan")))
         if return_bit_match:
             score_dict.update(dict(bit_acc=float("nan")))
         if return_num_tokens_scored:
@@ -349,9 +348,9 @@ class WatermarkDetector(WatermarkBase):
         return p_value
 
     @lru_cache(maxsize=2**32)
-    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, messsage: str):
+    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, message: str):
         """Expensive re-seeding and sampling is cached."""
-        self.message = messsage
+        self.message = message
         # Handle with care, should ideally reset on __getattribute__ access to self.prf_type, self.context_width, self.self_salt, self.hash_key
         greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
         return True if target in greenlist_ids else False, self.get_current_position()
@@ -425,18 +424,25 @@ class WatermarkDetector(WatermarkBase):
         return_z_at_T: bool = True,
         return_p_value: bool = True,
         return_bit_match: bool = True,
+        return_z_score_max: bool =True,
+        message: str = "",
     ):
+        gold_message = message
         ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position \
             = self._score_ngrams_in_passage(input_ids)
 
         position_cnt = collections.Counter(ngram_to_position_lookup.values())
         msg_prediction = []
+        ratios = []
         for pos in range(1, self.message_length + 1):
             one_Gt_cnt, zero_Gt_cnt = green_cnt_by_position[pos][1], green_cnt_by_position[pos][0]
-            ratio = max(one_Gt_cnt, zero_Gt_cnt) / position_cnt[pos]
+            if position_cnt[pos] == 0:
+                position_cnt[pos] = 1e9
+            rat = max(one_Gt_cnt, zero_Gt_cnt) / position_cnt[pos]
+            ratios.append(rat)
             pred = 1 if one_Gt_cnt > zero_Gt_cnt else 0
             msg_prediction.append(pred)
-        matched_bits, total_bits = self._compute_ber(msg_prediction)
+        matched_bits, total_bits = self._compute_ber(msg_prediction, gold_message)
 
         for ngram, green_token in ngram_to_watermark_lookup.items():
             pos = ngram_to_position_lookup[ngram]
@@ -451,14 +457,14 @@ class WatermarkDetector(WatermarkBase):
         if self.ignore_repeated_ngrams:
             # Method that only counts a green/red hit once per unique ngram.
             # New num total tokens scored (T) becomes the number unique ngrams.
-            # We iterate over all unqiue token ngrams in the input, computing the greenlist
+            # We iterate over all unique token ngrams in the input, computing the greenlist
             # induced by the context in each, and then checking whether the last
             # token falls in that greenlist.
             num_tokens_scored = len(frequencies_table.keys())
             green_token_count = sum(ngram_to_watermark_lookup.values())
         else:
             num_tokens_scored = sum(frequencies_table.values())
-            assert num_tokens_scored == len(input_ids) - self.context_width + self.self_salt
+            assert num_tokens_scored == len(input_ids) - self.context_width + self.self_salt, "Error for num_tokens_scored"
             green_token_count = sum(
                 freq * outcome
                 for freq, outcome in zip(
@@ -468,6 +474,10 @@ class WatermarkDetector(WatermarkBase):
         assert green_token_count == green_unique.sum()
         # HF-style output dictionary
         score_dict = dict()
+        if return_z_score_max:
+            max_pos, _ = max(enumerate(ratios), key=lambda x: x[1])
+            gt_cnt = max(green_cnt_by_position[max_pos + 1][0], green_cnt_by_position[max_pos + 1][1])
+            score_dict.update(dict(z_score_max=self._compute_z_score(gt_cnt, position_cnt[max_pos + 1])))
         if return_bit_match:
             score_dict.update(dict(bit_acc=matched_bits / total_bits))
         if return_num_tokens_scored:
@@ -624,11 +634,11 @@ class WatermarkDetector(WatermarkBase):
 
         return score_dict
 
-    def _compute_ber(self, pred_msg: list):
+    def _compute_ber(self, pred_msg: list, message: str):
         pred_msg = "".join(map(str, pred_msg))
         match = 0
         total = 0
-        for g, p in zip(self.message, pred_msg):
+        for g, p in zip(message, pred_msg):
             if g == p:
                 match += 1
             total += 1
