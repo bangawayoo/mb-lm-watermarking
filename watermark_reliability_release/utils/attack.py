@@ -169,6 +169,8 @@ def copy_paste_attack(example, tokenizer=None, args=None):
     else:
         raise ValueError(f"Invalid attack type: {args.cp_attack_type}")
 
+    tokenized_attacked_output = list(map(int, tokenized_attacked_output))
+
     example["w_wm_output_attacked"] = tokenizer.batch_decode(
         [tokenized_attacked_output], skip_special_tokens=True
     )[0]

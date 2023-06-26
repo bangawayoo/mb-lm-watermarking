@@ -442,6 +442,8 @@ class WatermarkDetector(WatermarkBase):
             ratios.append(rat)
             pred = 1 if one_Gt_cnt > zero_Gt_cnt else 0
             msg_prediction.append(pred)
+
+        # compute bit accraucy
         matched_bits, total_bits = self._compute_ber(msg_prediction, gold_message)
 
         for ngram, green_token in ngram_to_watermark_lookup.items():
@@ -471,13 +473,22 @@ class WatermarkDetector(WatermarkBase):
                     frequencies_table.values(), ngram_to_watermark_lookup.values()
                 )
             )
+
+        # compute z-scores per position
+        z_score_per_position = []
+
+        for p in range(1, self.message_length + 1):
+            green_cnt = max(green_cnt_by_position[p])
+            green_cnt_diff = max(green_cnt_by_position[p]) - min(green_cnt_by_position[p])
+            z_score = self._compute_z_score(green_cnt, position_cnt[p])
+            z_score_per_position.append(z_score)
+
         assert green_token_count == green_unique.sum()
         # HF-style output dictionary
         score_dict = dict()
         if return_z_score_max:
-            max_pos, _ = max(enumerate(ratios), key=lambda x: x[1])
-            gt_cnt = max(green_cnt_by_position[max_pos + 1][0], green_cnt_by_position[max_pos + 1][1])
-            score_dict.update(dict(z_score_max=self._compute_z_score(gt_cnt, position_cnt[max_pos + 1])))
+            z_score_sum = sum(z_score_per_position)
+            score_dict.update(dict(z_score_max=z_score_sum))
         if return_bit_match:
             score_dict.update(dict(bit_acc=matched_bits / total_bits))
         if return_num_tokens_scored:

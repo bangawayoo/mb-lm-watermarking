@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES="1"
+export CUDA_VISIBLE_DEVICES="0"
 wandb offline
 
 # Script to run the generation, attack, and evaluation steps of the pipeline
@@ -7,22 +7,21 @@ export HF_HOME=$HF_DATASETS_CACHE
 # as well as a path to the hf format LLAMA model
 
 # logging
-RUN_NAME=multi_bit-T600
+RUN_NAME=1b-T50
 OUTPUT_DIR=test
 WANDB=T
 
 # experiment types
-RUN_GEN=F
-RUN_ATT=T
+RUN_GEN=T
+RUN_ATT=F
 RUN_EVAL=T
 
 
 #generation related
 MODEL_PATH="facebook/opt-1.3b"
-MODEL_PATH="gpt2"
-MIN_GEN=500
+MIN_GEN=100
 SAMPLING=True
-TOKEN_LEN=600
+TOKEN_LEN=50
 BS=1
 
 # watermarking related

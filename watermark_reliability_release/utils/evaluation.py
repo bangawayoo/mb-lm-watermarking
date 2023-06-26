@@ -203,6 +203,15 @@ def compute_z_score(
     if input_text == "":
         error = True
     else:
+        # score_dict = watermark_detector.detect(
+        #     input_text,
+        #     window_size=window_size,
+        #     window_stride=window_stride,
+        #     return_green_token_mask=return_green_token_mask,
+        #     return_prediction=False,  # this conversion to "decision" only desired in demo context
+        #     convert_to_float=True,  # this helps with integrity under NaNs
+        #     return_z_at_T=args.compute_scores_at_T,
+        #     message=example['message'])
         try:
             score_dict = watermark_detector.detect(
                 input_text,
