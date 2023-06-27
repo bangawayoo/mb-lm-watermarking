@@ -468,7 +468,7 @@ def generate(
     msg_length = args.message_length
     msg_decimal = random.getrandbits(msg_length)
     msg_binary = format(msg_decimal, f"0{msg_length}b")
-    watermark_processor.message = msg_binary
+    watermark_processor.set_message(msg_binary)
     messages = [msg_binary] * len(examples['input_ids'])
 
     with torch.no_grad():

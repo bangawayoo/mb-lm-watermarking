@@ -7,8 +7,8 @@ export HF_HOME=$HF_DATASETS_CACHE
 # as well as a path to the hf format LLAMA model
 
 # logging
-RUN_NAME=1b-T50
-OUTPUT_DIR=test
+RUN_NAME=quad_base
+OUTPUT_DIR=debug
 WANDB=T
 
 # experiment types
@@ -19,16 +19,16 @@ RUN_EVAL=T
 
 #generation related
 MODEL_PATH="facebook/opt-1.3b"
-MIN_GEN=100
+MIN_GEN=10
 SAMPLING=True
-TOKEN_LEN=50
+TOKEN_LEN=200
 BS=1
 
 # watermarking related
 SEED_SCH="selfhash"
 GAMMA=0.25
 DELTA=2.0
-MSG_LEN=4
+MSG_LEN=2
 
 # attack related
 ATTACK_M=copy-paste

@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 import collections
-from math import sqrt
+from math import sqrt, ceil
 from itertools import chain, tee
 from functools import lru_cache
 import random
@@ -58,6 +58,11 @@ class WatermarkBase:
         # parameters for multi-bit watermarking
         self.message = None
         self.bit_position = None
+        self.base = 4
+        self.chunk = None
+        self.converted_message = None
+        self.message_char = None
+
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
         """Initialize all internal settings of the seeding strategy from a colloquial, "public" name for the scheme."""
@@ -79,10 +84,10 @@ class WatermarkBase:
         # determine bit position
         random.seed(prf_key % (2**64 - 1))
         # select the position
-        self.bit_position = random.randint(1, len(self.message))
-        bit = self.get_current_bit(self.bit_position)
+        self.bit_position = random.randint(1, len(self.converted_message))
+        self.message_char = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
-        self.rng.manual_seed(prf_key % (2**64 - 1) + bit)  # safeguard against overflow from long
+        self.rng.manual_seed(prf_key % (2**64 - 1))  # safeguard against overflow from long
 
     def _get_greenlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         """Seed rng based on local context width and use this information to generate ids on the green list."""
@@ -92,19 +97,43 @@ class WatermarkBase:
         vocab_permutation = torch.randperm(
             self.vocab_size, device=input_ids.device, generator=self.rng
         )
-        if self.select_green_tokens:  # directly
-            greenlist_ids = vocab_permutation[:greenlist_size]  # new
-        else:  # select green via red
-            greenlist_ids = vocab_permutation[
-                (self.vocab_size - greenlist_size) :
-            ]  # legacy behavior
-        return greenlist_ids
+        candidate_greenlist = torch.chunk(vocab_permutation, self.base)
+        random.seed(self.message_char)
+        g_idx = random.randint(0, len(candidate_greenlist) - 1)
+        return candidate_greenlist[g_idx]
 
     def get_current_bit(self, bit_position):
-        return int(self.message[bit_position - 1])
+        return int(self.converted_message[bit_position - 1])
 
     def get_current_position(self):
         return self.bit_position
+
+    def set_message(self, binary_msg: str = ""):
+        self.message = binary_msg
+        self.converted_message = self._convert_binary_to_base(binary_msg)
+        self.chunk = self.base // 2
+
+    def _convert_binary_to_base(self, binary_msg):
+        chunk = self.base // 2
+        converted_msg = ""
+        for i in range(0, ceil(len(binary_msg) / chunk)):
+            msg_chunk = binary_msg[i * chunk : (i+1) * chunk]
+            msg_chunk += "0" * (chunk - len(msg_chunk))
+            decimal = int(msg_chunk, 2)
+            base_number = self._numberToBase(decimal, self.base)
+            converted_msg += str(base_number)
+        return converted_msg
+
+    def _numberToBase(self, n, b):
+        if n == 0:
+            return 0
+        digits = []
+        while n:
+            digits.append(int(n % b))
+            n //= b
+        assert len(digits) == 1, "Make sure binary message conversion is right"
+        output = digits[::-1][0]
+        return output
 
 
 class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
@@ -201,9 +230,6 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
                 pass  # do not break early
         return torch.as_tensor(final_greenlist, device=input_ids.device)
 
-    def set_message(self, message):
-        """called before generating each batch"""
-        self.message = message
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         """Call with previous context as input_ids, and scores for next token."""
@@ -350,7 +376,7 @@ class WatermarkDetector(WatermarkBase):
     @lru_cache(maxsize=2**32)
     def _get_ngram_score_cached(self, prefix: tuple[int], target: int, message: str):
         """Expensive re-seeding and sampling is cached."""
-        self.message = message
+        self.converted_message = message
         # Handle with care, should ideally reset on __getattribute__ access to self.prf_type, self.context_width, self.self_salt, self.hash_key
         greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
         return True if target in greenlist_ids else False, self.get_current_position()
@@ -370,23 +396,26 @@ class WatermarkDetector(WatermarkBase):
         frequencies_table = collections.Counter(token_ngram_generator)
         ngram_to_watermark_lookup = collections.defaultdict(list)
         ngram_to_position_lookup = {}
-        green_cnt_by_position = {i: [0, 0] for i in range(1, self.message_length + 1)}
+        green_cnt_by_position = {i: [0, 0, 0, 0] for i in range(1, self.message_length + 1)}
 
         for idx, ngram_example in enumerate(frequencies_table.keys()):
             prefix = ngram_example if self.self_salt else ngram_example[:-1]
             target = ngram_example[-1]
-            for m in [0, 1]:
-                message = str(m) * self.message_length
+            for m in [0, 1, 2, 3]:
+                message = str(m) * ceil(self.message_length / 2)
                 greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, message)
                 ngram_to_watermark_lookup[ngram_example].append(greenlist_flag)
+                # position should be chosen independently of the message
+                prev_pos = ngram_to_position_lookup.get(ngram_example, None)
                 ngram_to_position_lookup[ngram_example] = current_position
+
                 if greenlist_flag:
                     green_cnt_by_position[current_position][m] += 1
-
         return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position
 
     def _get_green_at_T_booleans(self, input_ids, ngram_to_watermark_lookup) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Generate binary list of green vs. red per token, a separate list that ignores repeated ngrams, and a list of offsets to
+        """
+        Generate binary list of green vs. red per token, a separate list that ignores repeated ngrams, and a list of offsets to
         convert between both representations:
         green_token_mask = green_token_mask_unique[offsets] except for all locations where otherwise a repeat would be counted
         """
@@ -433,17 +462,13 @@ class WatermarkDetector(WatermarkBase):
 
         position_cnt = collections.Counter(ngram_to_position_lookup.values())
         msg_prediction = []
-        ratios = []
-        for pos in range(1, self.message_length + 1):
-            one_Gt_cnt, zero_Gt_cnt = green_cnt_by_position[pos][1], green_cnt_by_position[pos][0]
+        for pos in range(1, ceil(self.message_length / 2) + 1):
+            pred, _ = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
             if position_cnt[pos] == 0:
                 position_cnt[pos] = 1e9
-            rat = max(one_Gt_cnt, zero_Gt_cnt) / position_cnt[pos]
-            ratios.append(rat)
-            pred = 1 if one_Gt_cnt > zero_Gt_cnt else 0
             msg_prediction.append(pred)
 
-        # compute bit accraucy
+        # compute bit accuracy
         matched_bits, total_bits = self._compute_ber(msg_prediction, gold_message)
 
         for ngram, green_token in ngram_to_watermark_lookup.items():
@@ -475,13 +500,13 @@ class WatermarkDetector(WatermarkBase):
             )
 
         # compute z-scores per position
-        z_score_per_position = []
+        z_score_per_position = [0]
 
         for p in range(1, self.message_length + 1):
             green_cnt = max(green_cnt_by_position[p])
             green_cnt_diff = max(green_cnt_by_position[p]) - min(green_cnt_by_position[p])
-            z_score = self._compute_z_score(green_cnt, position_cnt[p])
-            z_score_per_position.append(z_score)
+            # z_score = self._compute_z_score(green_cnt, position_cnt[p])
+            # z_score_per_position.append(z_score)
 
         assert green_token_count == green_unique.sum()
         # HF-style output dictionary
@@ -637,7 +662,6 @@ class WatermarkDetector(WatermarkBase):
             z_score = score_dict.get("z_score", optimal_z)
             score_dict.update(dict(p_value=self._compute_p_value(z_score)))
 
-
         # Return per-token results for mask. This is still the same, just scored by windows
         # todo would be to mark the actually counted tokens differently
         if return_green_token_mask:
@@ -647,9 +671,16 @@ class WatermarkDetector(WatermarkBase):
 
     def _compute_ber(self, pred_msg: list, message: str):
         pred_msg = "".join(map(str, pred_msg))
+        binary_pred = "".join([format(int(char), f"02b") for char in pred_msg])
+
         match = 0
         total = 0
-        for g, p in zip(message, pred_msg):
+        if len(binary_pred) != len(message):
+            print("Extracted message length is different from the original message!")
+            print(pred_msg)
+            print(binary_pred)
+            breakpoint()
+        for g, p in zip(message, binary_pred):
             if g == p:
                 match += 1
             total += 1

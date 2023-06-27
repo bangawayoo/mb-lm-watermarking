@@ -203,16 +203,7 @@ def compute_z_score(
     if input_text == "":
         error = True
     else:
-        # score_dict = watermark_detector.detect(
-        #     input_text,
-        #     window_size=window_size,
-        #     window_stride=window_stride,
-        #     return_green_token_mask=return_green_token_mask,
-        #     return_prediction=False,  # this conversion to "decision" only desired in demo context
-        #     convert_to_float=True,  # this helps with integrity under NaNs
-        #     return_z_at_T=args.compute_scores_at_T,
-        #     message=example['message'])
-        try:
+        if True:
             score_dict = watermark_detector.detect(
                 input_text,
                 window_size=window_size,
@@ -221,14 +212,25 @@ def compute_z_score(
                 return_prediction=False,  # this conversion to "decision" only desired in demo context
                 convert_to_float=True,  # this helps with integrity under NaNs
                 return_z_at_T=args.compute_scores_at_T,
-                message=example['message']
-            )
-        except ValueError as err:
-            print(err)
-            error = True
-        except Exception as err:
-            print(err)
-            error = True
+                message=example['message'])
+        else:
+            try:
+                score_dict = watermark_detector.detect(
+                    input_text,
+                    window_size=window_size,
+                    window_stride=window_stride,
+                    return_green_token_mask=return_green_token_mask,
+                    return_prediction=False,  # this conversion to "decision" only desired in demo context
+                    convert_to_float=True,  # this helps with integrity under NaNs
+                    return_z_at_T=args.compute_scores_at_T,
+                    message=example['message']
+                )
+            except ValueError as err:
+                print(err)
+                error = True
+            except Exception as err:
+                print(err)
+                error = True
 
     if error:
         problem_text = f"'{input_text[:40]} {'[...]' if len(input_text) > 40 else ''}'"
