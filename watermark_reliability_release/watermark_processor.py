@@ -55,6 +55,9 @@ class WatermarkBase:
         # Legacy behavior:
         self.select_green_tokens = select_green_tokens
 
+        self.converted_message = None
+        self.message = None
+
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
         """Initialize all internal settings of the seeding strategy from a colloquial, "public" name for the scheme."""
         self.prf_type, self.context_width, self.self_salt, self.hash_key = seeding_scheme_lookup(
@@ -90,6 +93,9 @@ class WatermarkBase:
                 (self.vocab_size - greenlist_size) :
             ]  # legacy behavior
         return greenlist_ids
+
+    def set_message(self, binary_msg: str = ""):
+        pass
 
 
 class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
@@ -387,6 +393,7 @@ class WatermarkDetector(WatermarkBase):
         return_z_score: bool = True,
         return_z_at_T: bool = True,
         return_p_value: bool = True,
+        **kwargs
     ):
         ngram_to_watermark_lookup, frequencies_table = self._score_ngrams_in_passage(input_ids)
         green_token_mask, green_unique, offsets = self._get_green_at_T_booleans(

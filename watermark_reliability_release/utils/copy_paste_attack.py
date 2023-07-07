@@ -1,3 +1,5 @@
+import random
+
 import torch
 
 
@@ -20,15 +22,34 @@ def single_insertion(
 
     return tokenized_no_wm_output_cloned
 
-
+#FIXME: reimplement sampling insertion location. this takes too long on certain samples
 def triple_insertion_single_len(
     attack_len,
     min_token_count,
     tokenized_no_wm_output,  # dst
     tokenized_w_wm_output,  # src
 ):
+    # my implementation
+    # rand_insert_locs = []
+    # start_idx = 0
+    # end_idx = min_token_count - 3 * attack_len
+    # indices = range(len(3))
+    # if end_idx < 1:
+    #     return None
+    #
+    # while len(rand_insert_locs) < 3:
+    #     idx = random.randint(start_idx, end_idx)
+    #     rand_insert_locs.append(idx)
+    #     end_idx += attack_len
+    #     start_idx = idx
+
     tmp_attack_lens = (attack_len, attack_len, attack_len)
+    max_trial = 500
+    cnt = 0
     while True:
+        if max_trial < cnt:
+            return None
+        # cnt += 1
         rand_insert_locs = torch.randint(low=0, high=min_token_count, size=(len(tmp_attack_lens),))
         _, indices = torch.sort(rand_insert_locs)
 

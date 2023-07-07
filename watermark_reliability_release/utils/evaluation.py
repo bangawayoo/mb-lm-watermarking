@@ -203,7 +203,7 @@ def compute_z_score(
     if input_text == "":
         error = True
     else:
-        if True:
+        if False:
             score_dict = watermark_detector.detect(
                 input_text,
                 window_size=window_size,

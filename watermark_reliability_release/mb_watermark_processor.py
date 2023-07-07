@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 import collections
-from math import sqrt, ceil
+from math import sqrt, ceil, floor, log2
 from itertools import chain, tee
 from functools import lru_cache
 import random
@@ -38,6 +38,8 @@ class WatermarkBase:
         delta: float = 2.0,
         seeding_scheme: str = "simple_1",  # simple default, find more schemes in alternative_prf_schemes.py
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
+        base: int = 4,  # base of each message
+        message_length: int = 4,
     ):
         # patch now that None could now maybe be passed as seeding_scheme
         if seeding_scheme is None:
@@ -55,11 +57,19 @@ class WatermarkBase:
         # Legacy behavior:
         self.select_green_tokens = select_green_tokens
 
-        # parameters for multi-bit watermarking
+        # Parameters for multi-bit watermarking
+        self.message_length = message_length
+        if message_length < 2:
+            base = 2
         self.message = None
         self.bit_position = None
-        self.base = 4
-        self.chunk = None
+        self.base = base
+        self.chunk = int(ceil(log2(base)))
+        # update gamma if base is larger than 2
+        if self.base > 2:
+            self.gamma = 1 / self.base
+            # round down to two decimals
+            self.gamma = floor(self.gamma * 100) / 100.0
         self.converted_message = None
         self.message_char = None
 
@@ -81,9 +91,8 @@ class WatermarkBase:
         prf_key = prf_lookup[self.prf_type](
             input_ids[-self.context_width :], salt_key=self.hash_key
         )
-        # determine bit position
+        # seeding for bit position
         random.seed(prf_key % (2**64 - 1))
-        # select the position
         self.bit_position = random.randint(1, len(self.converted_message))
         self.message_char = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
@@ -98,9 +107,10 @@ class WatermarkBase:
             self.vocab_size, device=input_ids.device, generator=self.rng
         )
         candidate_greenlist = torch.chunk(vocab_permutation, self.base)
-        random.seed(self.message_char)
-        g_idx = random.randint(0, len(candidate_greenlist) - 1)
-        return candidate_greenlist[g_idx]
+        # random.seed(self.message_char)
+        # g_idx = random.randint(0, len(candidate_greenlist) - 1)
+        # return candidate_greenlist[g_idx]
+        return candidate_greenlist[self.message_char]
 
     def get_current_bit(self, bit_position):
         return int(self.converted_message[bit_position - 1])
@@ -111,14 +121,13 @@ class WatermarkBase:
     def set_message(self, binary_msg: str = ""):
         self.message = binary_msg
         self.converted_message = self._convert_binary_to_base(binary_msg)
-        self.chunk = self.base // 2
 
     def _convert_binary_to_base(self, binary_msg):
-        chunk = self.base // 2
         converted_msg = ""
-        for i in range(0, ceil(len(binary_msg) / chunk)):
-            msg_chunk = binary_msg[i * chunk : (i+1) * chunk]
-            msg_chunk += "0" * (chunk - len(msg_chunk))
+        for i in range(0, ceil(len(binary_msg) / self.chunk)):
+            msg_chunk = binary_msg[i * self.chunk : (i+1) * self.chunk]
+            # left pad message with zeros if msg chunk is short
+            msg_chunk = "0" * (self.chunk - len(msg_chunk)) + msg_chunk
             decimal = int(msg_chunk, 2)
             base_number = self._numberToBase(decimal, self.base)
             converted_msg += str(base_number)
@@ -287,7 +296,6 @@ class WatermarkDetector(WatermarkBase):
         z_threshold: float = 4.0,
         normalizers: list[str] = ["unicode"],  # or also: ["unicode", "homoglyphs", "truecase"]
         ignore_repeated_ngrams: bool = False,
-        message_length: int = 4,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -304,7 +312,6 @@ class WatermarkDetector(WatermarkBase):
         for normalization_strategy in normalizers:
             self.normalizers.append(normalization_strategy_lookup(normalization_strategy))
         self.ignore_repeated_ngrams = ignore_repeated_ngrams
-        self.message_length = message_length
 
     def dummy_detect(
         self,
@@ -396,19 +403,21 @@ class WatermarkDetector(WatermarkBase):
         frequencies_table = collections.Counter(token_ngram_generator)
         ngram_to_watermark_lookup = collections.defaultdict(list)
         ngram_to_position_lookup = {}
-        green_cnt_by_position = {i: [0, 0, 0, 0] for i in range(1, self.message_length + 1)}
+        # initialize dictionary of {position: [0, ..., r]}
+        green_cnt_by_position = {i: [0 for _ in range(self.base)] for i in range(1, self.message_length + 1)}
 
         for idx, ngram_example in enumerate(frequencies_table.keys()):
             prefix = ngram_example if self.self_salt else ngram_example[:-1]
             target = ngram_example[-1]
-            for m in [0, 1, 2, 3]:
-                message = str(m) * ceil(self.message_length / 2)
+            for m in range(self.base):
+                message = str(m) * ceil(self.message_length / self.chunk)
                 greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, message)
                 ngram_to_watermark_lookup[ngram_example].append(greenlist_flag)
-                # position should be chosen independently of the message
-                prev_pos = ngram_to_position_lookup.get(ngram_example, None)
+                # position is chosen independently of the message content
+                # so looping through the message will not change the current position
                 ngram_to_position_lookup[ngram_example] = current_position
 
+                # mark the color list
                 if greenlist_flag:
                     green_cnt_by_position[current_position][m] += 1
         return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position
@@ -462,15 +471,20 @@ class WatermarkDetector(WatermarkBase):
 
         position_cnt = collections.Counter(ngram_to_position_lookup.values())
         msg_prediction = []
-        for pos in range(1, ceil(self.message_length / 2) + 1):
+        for pos in range(1, ceil(self.message_length / self.chunk) + 1):
+            # find the index (digit) with the max counts of colorlist
             pred, _ = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
             if position_cnt[pos] == 0:
                 position_cnt[pos] = 1e9
             msg_prediction.append(pred)
 
+        # print(msg_prediction)
+        # print(green_cnt_by_position)
+        # breakpoint()
         # compute bit accuracy
         matched_bits, total_bits = self._compute_ber(msg_prediction, gold_message)
 
+        # use the predicted message to select ngram_to_watermark_lookup
         for ngram, green_token in ngram_to_watermark_lookup.items():
             pos = ngram_to_position_lookup[ngram]
             bit = msg_prediction[pos - 1]
@@ -500,13 +514,12 @@ class WatermarkDetector(WatermarkBase):
             )
 
         # compute z-scores per position
-        z_score_per_position = [0]
-
-        for p in range(1, self.message_length + 1):
+        z_score_per_position = []
+        for p in range(1, ceil(self.message_length / self.chunk) + 1):
             green_cnt = max(green_cnt_by_position[p])
             green_cnt_diff = max(green_cnt_by_position[p]) - min(green_cnt_by_position[p])
-            # z_score = self._compute_z_score(green_cnt, position_cnt[p])
-            # z_score_per_position.append(z_score)
+            z_score = self._compute_z_score(green_cnt, position_cnt[p])
+            z_score_per_position.append(z_score)
 
         assert green_token_count == green_unique.sum()
         # HF-style output dictionary
@@ -671,15 +684,18 @@ class WatermarkDetector(WatermarkBase):
 
     def _compute_ber(self, pred_msg: list, message: str):
         pred_msg = "".join(map(str, pred_msg))
-        binary_pred = "".join([format(int(char), f"02b") for char in pred_msg])
+        # change each character to binary base.
+        # chunk length will determine the number of digits. e.g. for base=4, chunk=2
+        chunk = min(self.chunk, self.message_length)
+        binary_pred = "".join([format(int(char), f"0{chunk}b") for char in pred_msg])
+        if len(binary_pred) != len(message):
+            breakpoint()
+            print(pred_msg)
+            print(binary_pred)
+            raise RuntimeError("Extracted message length is different from the original message!")
 
         match = 0
         total = 0
-        if len(binary_pred) != len(message):
-            print("Extracted message length is different from the original message!")
-            print(pred_msg)
-            print(binary_pred)
-            breakpoint()
         for g, p in zip(message, binary_pred):
             if g == p:
                 match += 1

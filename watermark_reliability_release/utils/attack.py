@@ -107,9 +107,14 @@ def check_output_column_lengths(example, min_len=0):
 def tokenize_for_copy_paste(example, tokenizer=None, args=None):
     for text_col in OUTPUT_TEXT_COLUMN_NAMES:
         if text_col in example:
-            example[f"{text_col}_tokd"] = tokenizer(
+            tokenized = tokenizer(
                 example[text_col], return_tensors="pt", add_special_tokens=False
             )["input_ids"][0]
+            # empty tensors are float type by default
+            # this leads to an error when constructing pyarrow table
+            if not str(tokenized.dtype) == "torch.int64":
+                tokenized = tokenized.long()
+            example[f"{text_col}_tokd"] = tokenized
     return example
 
 
@@ -168,6 +173,12 @@ def copy_paste_attack(example, tokenizer=None, args=None):
         raise NotImplementedError(f"Attack type {args.cp_attack_type} not implemented")
     else:
         raise ValueError(f"Invalid attack type: {args.cp_attack_type}")
+
+    # error occurred during attacking
+    if tokenized_attacked_output is None:
+        example["w_wm_output_attacked"] = ""
+        example["w_wm_output_attacked_length"] = 0
+        return example
 
     tokenized_attacked_output = list(map(int, tokenized_attacked_output))
 
