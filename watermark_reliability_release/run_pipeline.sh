@@ -17,9 +17,9 @@ RUN_EVAL=T
 LENGTH_LIST="500"
 #generation related
 MODEL_PATH="facebook/opt-1.3b"
-MIN_GEN=100
+MIN_GEN=500 # number of valid samples to generate
 SAMPLING=True
-BS=1
+BS=8 # batch size for generation
 
 OUTPUT_DIR="test"
 WANDB=T
@@ -32,7 +32,7 @@ do
   SEED_SCH="selfhash"
   GAMMA=0.25
   DELTA=2.0
-  MSG_LEN=32
+  MSG_LEN=32 # bit-width
 
   # logging
   RUN_NAME="sanity-check-32b"
