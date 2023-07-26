@@ -1,6 +1,6 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES="0"
-wandb offline
+wandb online
 
 # Script to run the generation, attack, and evaluation steps of the pipeline
 export HF_HOME=$HF_DATASETS_CACHE
@@ -13,33 +13,40 @@ RUN_GEN=T
 RUN_ATT=T
 RUN_EVAL=T
 
+#generation related
 #LENGTH_LIST="200 600 1000"
 LENGTH_LIST="500"
-#generation related
+len="500"
 MODEL_PATH="facebook/opt-1.3b"
 MIN_GEN=500 # number of valid samples to generate
-SAMPLING=True
-BS=8 # batch size for generation
+SAMPLING=T
+BS=1 # batch size for generation
 
+# watermarking related
+SEED_SCH="lefthash"
+GAMMA=0.25
+DELTA="2"
+MSG_LEN=32 # bit-width
+RADIX=4
+ZERO_BIT=F
+
+# logging related
 OUTPUT_DIR="test"
 WANDB=T
 
-for len in $LENGTH_LIST
+# evaluation related
+EVAL_METRICS="z-score"
+
+for del in $DELTA
 do
-  TOKEN_LEN="$len"
-
-  # watermarking related
-  SEED_SCH="selfhash"
-  GAMMA=0.25
-  DELTA=2.0
-  MSG_LEN=32 # bit-width
-
-  # logging
-  RUN_NAME="sanity-check-32b"
-
+  TOKEN_LEN="${len}"
   # attack related
   ATTACK_M=copy-paste
+  # SRC_PCT="20% 40% 60% 80%"
+  srcp="80%"
 
+  # logging
+  RUN_NAME="lefthash-32b"
   GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
   echo "Running generation pipeline with output dir: $GENERATION_OUTPUT_DIR"
 
@@ -59,7 +66,9 @@ do
         --use_sampling $SAMPLING \
         --seeding_scheme=$SEED_SCH \
         --gamma=$GAMMA \
-        --delta=$DELTA \
+        --delta=$del \
+        --base=$RADIX \
+        --zero_bit=$ZERO_BIT \
         --run_name="$RUN_NAME"_gen \
         --wandb=$WANDB \
         --verbose=True \
@@ -72,10 +81,10 @@ do
   if [ $RUN_ATT == T ]
   then
     python attack_pipeline.py \
-        --attack_method=$ATTACK_M \
-        --run_name="$RUN_NAME"_gpt_attack \
+        --attack_method="${ATTACK_M}" \
+        --run_name="${RUN_NAME}_${ATTACK_M}-attack" \
         --wandb=$WANDB \
-        --cp_attack_insertion_len 25% \
+        --cp_attack_insertion_len "${srcp}" \
         --cp_attack_type triple-single \
         --input_dir="$GENERATION_OUTPUT_DIR" \
         --verbose=True --overwrite_output_file T
@@ -90,8 +99,9 @@ do
         --input_dir="$GENERATION_OUTPUT_DIR" \
         --output_dir="$GENERATION_OUTPUT_DIR"_eval \
         --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
-        --evaluation_metrics "z-score" \
+        --evaluation_metrics=$EVAL_METRICS \
         --message_length="$MSG_LEN" \
+        --base=$RADIX \
         --target_T="$TOKEN_LEN"
   fi
 done

@@ -17,6 +17,7 @@
 import os
 import argparse
 from functools import partial
+import random
 from tqdm import tqdm
 import wandb
 
@@ -157,6 +158,7 @@ def main(args):
         vocab=list(tokenizer.get_vocab().values()),
         gamma=args.gamma,
         delta=args.delta,
+        base=args.base,
         seeding_scheme=args.seeding_scheme,
         store_spike_ents=args.store_spike_ents,
         select_green_tokens=True,
@@ -501,7 +503,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--generation_seed",
         type=int,
-        default=None,
+        default=1,
         help="Seed for setting the torch rng prior to generation using any decoding scheme with randomness.",
     )
     parser.add_argument(
@@ -526,7 +528,8 @@ if __name__ == "__main__":
         "--delta",
         type=float,
         default=2.0,
-        help="The amount of bias (absolute) to add to the logits in the whitelist half of the vocabulary at every step",
+        help="The amount of bias (absolute) to add to the logits in the whitelist half of the vocabulary "
+             "at every step",
     )
     parser.add_argument(
         "--store_spike_ents",
@@ -534,6 +537,26 @@ if __name__ == "__main__":
         default=True,
         help=("Whether to store the spike entropies while generating with watermark processor. "),
     )
+    # multi-bit configuration
+    parser.add_argument(
+        "--message_length",
+        type=int,
+        default=4,
+        help="Number of bits of message to watermark",
+    )
+    parser.add_argument(
+        "--base",
+        type=int,
+        default=2,
+        help="Base (radix) of message. Defaults to bit message.",
+    )
+    parser.add_argument(
+        "--zero_bit",
+        type=str2bool,
+        default=False,
+        help="When true, this is a special case of zero-bit; all messages are set to 0.",
+    )
+
     parser.add_argument(
         "--verbose",
         type=str2bool,
@@ -582,14 +605,10 @@ if __name__ == "__main__":
         default=False,
         help="Allow overwriting of old generation files at the same output location.",
     )
-    parser.add_argument(
-        "--message_length",
-        type=int,
-        default=4,
-        help="Number of bits of message to watermark",
-    )
-    args = parser.parse_args()
 
+    args = parser.parse_args()
+    assert not args.zero_bit or (args.zero_bit and args.message_length == 1), "If conducting zero-bit experiment, " \
+                                                                              "message length should be 1."
     ###########################################################################
     # Argument validation and conditional setting
     ###########################################################################
@@ -619,4 +638,6 @@ if __name__ == "__main__":
     else:
         args.wandb_tags = []
 
+    # seed for randomly sampling message
+    random.seed(0)
     main(args)

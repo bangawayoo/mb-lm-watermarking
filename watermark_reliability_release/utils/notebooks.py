@@ -43,7 +43,6 @@ def filter_text_col_length(
     df = df[(df[text_col_name] <= upper_T)]
 
     print(f"Dropped {orig_len-len(df)} rows filtering {text_col_prefix}, new len {len(df)}")
-
     return df
 
 
