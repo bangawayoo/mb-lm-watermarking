@@ -9,21 +9,21 @@ export HF_HOME=$HF_DATASETS_CACHE
 
 
 # experiment types
-RUN_GEN=F
-RUN_ATT=F
+RUN_GEN=T
+RUN_ATT=T
 RUN_EVAL=T
 
 #generation related
 #LENGTH_LIST="200 600 1000"
 LENGTH_LIST="500"
-len="30"
-MODEL_PATH="facebook/opt-1.3b"
-MIN_GEN=10 # number of valid samples to generate
+len="100"
+MODEL_PATH="facebook/opt-6.7b"
+MIN_GEN=100 # number of valid samples to generate
 SAMPLING=T
 BS=1 # batch size for generation
 
 # watermarking related
-SEED_SCH="lefthash"
+SEED_SCH="selfhash"
 GAMMA=0.25
 DELTA="2"
 MSG_LEN=32 # bit-width
