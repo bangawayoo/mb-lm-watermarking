@@ -571,6 +571,7 @@ def main(args):
         ###########################################################################
         # Filter rows, then log means to wandb
         ###########################################################################
+        args.lower_tolerance_T = min(args.lower_tolerance_T, args.target_T)
         assert (
             args.target_T - args.lower_tolerance_T
         ) >= 0, "target_T - lower_tolerance_T must be >= 0"
@@ -1276,11 +1277,18 @@ if __name__ == "__main__":
         default=True,
         help="Whether to log the raw tabular metric data to wandb.",
     )
+    # watermarking related
     parser.add_argument(
         "--message_length",
         type=int,
         default=4,
         help="Number of bits of message to watermark",
+    )
+    parser.add_argument(
+        "--base",
+        type=int,
+        default=2,
+        help="Base (radix) of message. Defaults to bit message.",
     )
     args = parser.parse_args()
 

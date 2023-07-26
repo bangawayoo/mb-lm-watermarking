@@ -1,3 +1,4 @@
+#!/bin/bash
 export CUDA_VISIBLE_DEVICES="0"
 wandb offline
 
@@ -6,81 +7,101 @@ export HF_HOME=$HF_DATASETS_CACHE
 # requires some OUTPUT_DIR to be set in the environment
 # as well as a path to the hf format LLAMA model
 
-# logging
-RUN_NAME=1b-T50
-OUTPUT_DIR=test
-WANDB=T
 
 # experiment types
-RUN_GEN=T
+RUN_GEN=F
 RUN_ATT=F
 RUN_EVAL=T
 
-
 #generation related
+#LENGTH_LIST="200 600 1000"
+LENGTH_LIST="500"
+len="30"
 MODEL_PATH="facebook/opt-1.3b"
-MIN_GEN=100
-SAMPLING=True
-TOKEN_LEN=50
-BS=1
+MIN_GEN=10 # number of valid samples to generate
+SAMPLING=T
+BS=1 # batch size for generation
 
 # watermarking related
-SEED_SCH="selfhash"
+SEED_SCH="lefthash"
 GAMMA=0.25
-DELTA=2.0
-MSG_LEN=4
+DELTA="2"
+MSG_LEN=32 # bit-width
+RADIX=4
+ZERO_BIT=F
 
-# attack related
-ATTACK_M=copy-paste
+# logging related
+OUTPUT_DIR="test"
+WANDB=T
 
-GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
-echo "Running generation pipeline with output dir: $GENERATION_OUTPUT_DIR"
+# evaluation related
+EVAL_METRICS="z-score"
 
-if [ $RUN_GEN == T ]; then
-  python generation_pipeline.py \
-      --model_name=$MODEL_PATH \
-      --dataset_name=c4 \
-      --dataset_config_name=realnewslike \
-      --max_new_tokens=$TOKEN_LEN \
-      --min_prompt_tokens=50 \
-      --limit_indices=5000 \
-      --min_generations=$MIN_GEN \
-      --input_truncation_strategy=completion_length \
-      --input_filtering_strategy=prompt_and_completion_length \
-      --output_filtering_strategy=max_new_tokens \
-      --use_sampling $SAMPLING \
-      --seeding_scheme=$SEED_SCH \
-      --gamma=$GAMMA \
-      --delta=$DELTA \
-      --run_name="$RUN_NAME"_gen \
-      --wandb=$WANDB \
-      --verbose=True \
-      --output_dir=$GENERATION_OUTPUT_DIR \
-      --overwrite T \
-      --message_length=$MSG_LEN \
-      --generation_batch_size=$BS
-fi
+for del in $DELTA
+do
+  TOKEN_LEN="${len}"
+  # attack related
+  ATTACK_M=copy-paste
+  # SRC_PCT="20% 40% 60% 80%"
+  srcp="80%"
 
-if [ $RUN_ATT == T ]; then
-  python attack_pipeline.py \
-      --attack_method=$ATTACK_M \
-      --run_name="$RUN_NAME"_gpt_attack \
-      --wandb=$WANDB \
-      --cp_attack_insertion_len 25% \
-      --cp_attack_type triple-single \
-      --input_dir=$GENERATION_OUTPUT_DIR \
-      --verbose=True --overwrite_output_file T
-fi
+  # logging
+  RUN_NAME="test"
+  GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
+  echo "Running generation pipeline with output dir: $GENERATION_OUTPUT_DIR"
 
-if [ $RUN_EVAL == T ]; then
-  python evaluation_pipeline.py \
-      --evaluation_metrics=all \
-      --run_name="$RUN_NAME"_eval \
-      --wandb=$WANDB \
-      --input_dir=$GENERATION_OUTPUT_DIR \
-      --output_dir="$GENERATION_OUTPUT_DIR"_eval \
-      --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
-      --evaluation_metrics "z-score" \
-      --message_length=$MSG_LEN \
-      --target_T=$TOKEN_LEN
-fi
+  if [ $RUN_GEN == T ]
+  then
+    python generation_pipeline.py \
+        --model_name=$MODEL_PATH \
+        --dataset_name=c4 \
+        --dataset_config_name=realnewslike \
+        --max_new_tokens=$TOKEN_LEN \
+        --min_prompt_tokens=50 \
+        --limit_indices=5000 \
+        --min_generations=$MIN_GEN \
+        --input_truncation_strategy=completion_length \
+        --input_filtering_strategy=prompt_and_completion_length \
+        --output_filtering_strategy=max_new_tokens \
+        --use_sampling $SAMPLING \
+        --seeding_scheme=$SEED_SCH \
+        --gamma=$GAMMA \
+        --delta=$del \
+        --base=$RADIX \
+        --zero_bit=$ZERO_BIT \
+        --run_name="$RUN_NAME"_gen \
+        --wandb=$WANDB \
+        --verbose=True \
+        --output_dir="$GENERATION_OUTPUT_DIR" \
+        --overwrite T \
+        --message_length="$MSG_LEN" \
+        --generation_batch_size="$BS"
+  fi
+
+  if [ $RUN_ATT == T ]
+  then
+    python attack_pipeline.py \
+        --attack_method="${ATTACK_M}" \
+        --run_name="${RUN_NAME}_${ATTACK_M}-attack" \
+        --wandb=$WANDB \
+        --cp_attack_insertion_len "${srcp}" \
+        --cp_attack_type triple-single \
+        --input_dir="$GENERATION_OUTPUT_DIR" \
+        --verbose=True --overwrite_output_file T
+  fi
+
+  if [ $RUN_EVAL == T ]
+  then
+    python evaluation_pipeline.py \
+        --evaluation_metrics=all \
+        --run_name="$RUN_NAME"_eval \
+        --wandb=$WANDB \
+        --input_dir="$GENERATION_OUTPUT_DIR" \
+        --output_dir="$GENERATION_OUTPUT_DIR"_eval \
+        --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
+        --evaluation_metrics=$EVAL_METRICS \
+        --message_length="$MSG_LEN" \
+        --base=$RADIX \
+        --target_T="$TOKEN_LEN"
+  fi
+done

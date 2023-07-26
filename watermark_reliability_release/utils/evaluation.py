@@ -109,6 +109,8 @@ MAUVE_TEXT_PAIR_COLUMN_NAMES = OUTPUT_TEXT_PAIR_COLUMN_NAMES
 
 
 ROC_TEST_STAT_SUFFIXES = [
+    "chi_sq_p_val_min",
+    "chi_sq_p_val_sum",
     "z_score",
     "z_score_max",
     "win20-1_z_score",
@@ -179,6 +181,7 @@ def load_detector(args):
         normalizers=args.normalizers,
         ignore_repeated_ngrams=args.ignore_repeated_ngrams,
         message_length=args.message_length,
+        base=args.base,
     )
 
     return watermark_detector
@@ -203,7 +206,7 @@ def compute_z_score(
     if input_text == "":
         error = True
     else:
-        debug = False
+        debug = True
         if debug:
             score_dict = watermark_detector.detect(
                 input_text,
@@ -213,7 +216,9 @@ def compute_z_score(
                 return_prediction=False,  # this conversion to "decision" only desired in demo context
                 convert_to_float=True,  # this helps with integrity under NaNs
                 return_z_at_T=args.compute_scores_at_T,
-                message=example['message'])
+                message=example['message'],
+                col_name=text_column_name
+            )
         else:
             try:
                 score_dict = watermark_detector.detect(
@@ -224,7 +229,8 @@ def compute_z_score(
                     return_prediction=False,  # this conversion to "decision" only desired in demo context
                     convert_to_float=True,  # this helps with integrity under NaNs
                     return_z_at_T=args.compute_scores_at_T,
-                    message=example['message']
+                    message=example['message'],
+                    col_name=text_column_name,
                 )
             except ValueError as err:
                 print(err)
@@ -733,7 +739,6 @@ def compute_detect_retrieval(dataset, args=None):
 
 
 from utils.submitit import str2bool
-
 
 def scheme_hparam_extractor(x):
     is_ff = "ff" in x

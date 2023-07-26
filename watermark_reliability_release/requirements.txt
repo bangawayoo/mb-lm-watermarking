@@ -1,12 +1,5 @@
 spacy
 nltk
-scipy
-torch
-datasets
-transformers
-sentence-transformers
-tokenizers
-accelerate
 evaluate
 sacremoses
 seqeval
@@ -16,3 +9,4 @@ retriv==0.1.5
 wandb
 cmasher
 openai
+sentence-transformers

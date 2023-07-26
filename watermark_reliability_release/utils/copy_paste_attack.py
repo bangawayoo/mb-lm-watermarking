@@ -1,3 +1,5 @@
+import random
+
 import torch
 
 
@@ -20,24 +22,44 @@ def single_insertion(
 
     return tokenized_no_wm_output_cloned
 
-
+#FIXME: reimplement sampling insertion location. this takes too long on certain samples
 def triple_insertion_single_len(
     attack_len,
     min_token_count,
     tokenized_no_wm_output,  # dst
     tokenized_w_wm_output,  # src
 ):
-    tmp_attack_lens = (attack_len, attack_len, attack_len)
-    while True:
-        rand_insert_locs = torch.randint(low=0, high=min_token_count, size=(len(tmp_attack_lens),))
-        _, indices = torch.sort(rand_insert_locs)
+    # our implementation
+    rand_insert_locs = []
+    start_idx = 0
+    end_idx = min_token_count - 3 * attack_len
+    indices = range(3)
+    if end_idx < 1:
+        return None
 
-        if (
-            rand_insert_locs[indices[0]] + attack_len <= rand_insert_locs[indices[1]]
-            and rand_insert_locs[indices[1]] + attack_len <= rand_insert_locs[indices[2]]
-            and rand_insert_locs[indices[2]] + attack_len <= min_token_count
-        ):
-            break
+    while len(rand_insert_locs) < 3:
+        idx = random.randint(start_idx, end_idx)
+        rand_insert_locs.append(idx)
+        end_idx += attack_len
+        start_idx = idx
+
+    tmp_attack_lens = (attack_len, attack_len, attack_len)
+    max_trial = 500
+    cnt = 0
+    # original implementation with max trials added
+    # while True:
+    #     if max_trial < cnt:
+    #         return None
+    #     cnt += 1
+    #     rand_insert_locs = torch.randint(low=0, high=min_token_count, size=(len(tmp_attack_lens),))
+    #     _, indices = torch.sort(rand_insert_locs)
+    #
+    #     if (
+    #         rand_insert_locs[indices[0]] + attack_len <= rand_insert_locs[indices[1]]
+    #         and rand_insert_locs[indices[1]] + attack_len <= rand_insert_locs[indices[2]]
+    #         and rand_insert_locs[indices[2]] + attack_len <= min_token_count
+    #     ):
+    #         break
 
     # replace watermarked sections into unwatermarked ones
     # tokenized_no_wm_output_cloned = torch.clone(tokenized_no_wm_output) # used to be tensor

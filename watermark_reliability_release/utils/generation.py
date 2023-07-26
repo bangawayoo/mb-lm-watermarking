@@ -464,11 +464,16 @@ def generate(
     input_ids = collate_batch(input_ids=examples["input_ids"], collator=data_collator).to(device)
 
     # Sample multi-bit message: a batch will have the same message due to how the watermark processor operates.
-    # This won't be an issue hopefully when the number of samples is adequately big
+    # This won't be an issue hopefully when the number of samples is adequately large enough (~500)
     msg_length = args.message_length
-    msg_decimal = random.getrandbits(msg_length)
-    msg_binary = format(msg_decimal, f"0{msg_length}b")
+    if args.zero_bit:
+        msg_binary = "0"
+    else:
+        msg_decimal = random.getrandbits(msg_length)
+        msg_binary = format(msg_decimal, f"0{msg_length}b")
     watermark_processor.set_message(msg_binary)
+    print(msg_binary)
+    print(watermark_processor.converted_message)
     messages = [msg_binary] * len(examples['input_ids'])
 
     with torch.no_grad():
