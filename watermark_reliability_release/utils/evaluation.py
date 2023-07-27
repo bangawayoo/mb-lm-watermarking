@@ -206,7 +206,7 @@ def compute_z_score(
     if input_text == "":
         error = True
     else:
-        debug = True
+        debug = False
         if debug:
             score_dict = watermark_detector.detect(
                 input_text,

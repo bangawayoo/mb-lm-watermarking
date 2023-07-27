@@ -15,8 +15,8 @@ RUN_EVAL=T
 
 #generation related
 #LENGTH_LIST="200 600 1000"
-len="200"
-MODEL_PATH="facebook/opt-1.3b"
+#len="200"
+#MODEL_PATH="facebook/opt-1.3b"
 MIN_GEN=100 # number of valid samples to generate
 SAMPLING=T
 BS=1 # batch size for generation
@@ -25,7 +25,7 @@ BS=1 # batch size for generation
 SEED_SCH="selfhash"
 GAMMA=0.25
 DELTA="2"
-MSG_LEN=16 # bit-width
+#MSG_LEN=16 # bit-width
 RADIX=4
 ZERO_BIT=F
 
