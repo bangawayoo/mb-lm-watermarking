@@ -35,8 +35,7 @@ WANDB=T
 
 # evaluation related
 EVAL_METRICS="z-score"
-echo $MODEL_PATH
-exit
+
 for del in $DELTA
 do
   TOKEN_LEN="${len}"
