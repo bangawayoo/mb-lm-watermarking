@@ -1,0 +1,16 @@
+gradio
+nltk
+scipy
+torch
+transformers
+tokenizers
+accelerate
+datasets
+wandb
+evaluate
+numpy
+scikit-learn
+tqdm
+requests
+pytest
+faiss-gpu

@@ -500,7 +500,7 @@ class WatermarkDetector(WatermarkBase):
             # find the index (digit) with the max counts of colorlist
             pred, _ = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
             if position_cnt.get(pos, None) is None:
-                position_cnt[pos] == -1
+                position_cnt[pos] = -1
             msg_prediction.append(pred)
 
         # print(gold_message)
