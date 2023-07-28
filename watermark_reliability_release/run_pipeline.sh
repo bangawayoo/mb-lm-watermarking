@@ -8,37 +8,41 @@ export HF_HOME=$HF_DATASETS_CACHE
 # as well as a path to the hf format LLAMA model
 
 
-# experiment types
+### experiment types ###
 RUN_GEN=T
 RUN_ATT=T
 RUN_EVAL=T
+##########################
 
-#generation related
-#LENGTH_LIST="200 600 1000"
-#len="200"
+### generation related ###
+#LEN="200"
 #MODEL_PATH="facebook/opt-1.3b"
 #MIN_GEN=100 # number of valid samples to generate
 SAMPLING=T
-BS=1 # batch size for generation
+#BS=1 # batch size for generation
+##########################
 
-# watermarking related
+### watermarking related ###
 SEED_SCH="selfhash"
 GAMMA=0.25
 DELTA="2"
 #MSG_LEN=16 # bit-width
-RADIX=4
+#RADIX=4
 ZERO_BIT=F
+##########################
 
-# logging related
+### logging related ###
 OUTPUT_DIR="/experiments"
 WANDB=T
+##########################
 
-# evaluation related
+### evaluation related ###
 EVAL_METRICS="z-score"
+##########################
 
 for del in $DELTA
 do
-  TOKEN_LEN="${len}"
+  TOKEN_LEN="${LEN}"
   # attack related
   ATTACK_M=copy-paste
   # SRC_PCT="20% 40% 60% 80%"
