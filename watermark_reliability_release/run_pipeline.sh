@@ -17,7 +17,7 @@ RUN_EVAL=T
 #LENGTH_LIST="200 600 1000"
 #len="200"
 #MODEL_PATH="facebook/opt-1.3b"
-MIN_GEN=100 # number of valid samples to generate
+#MIN_GEN=100 # number of valid samples to generate
 SAMPLING=T
 BS=1 # batch size for generation
 
@@ -30,7 +30,7 @@ RADIX=4
 ZERO_BIT=F
 
 # logging related
-OUTPUT_DIR="test"
+OUTPUT_DIR="/experiments"
 WANDB=T
 
 # evaluation related
