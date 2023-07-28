@@ -42,7 +42,6 @@ EVAL_METRICS="z-score"
 
 for del in $DELTA
 do
-  TOKEN_LEN="${LEN}"
   # attack related
   ATTACK_M=copy-paste
   # SRC_PCT="20% 40% 60% 80%"
