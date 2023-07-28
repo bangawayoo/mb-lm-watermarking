@@ -22,7 +22,7 @@ TOKEN_LEN="500"
 MODEL_PATH="facebook/opt-1.3b"
 MIN_GEN=100 # number of valid samples to generate
 SAMPLING=T
-BS=128 # batch size for generation
+BS=64 # batch size for generation
 ##########################
 
 ### watermarking related ###
