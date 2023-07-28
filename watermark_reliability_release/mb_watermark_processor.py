@@ -559,10 +559,11 @@ class WatermarkDetector(WatermarkBase):
             green_cnt_diff = max(all_green_cnt) - min(all_green_cnt)
             z_score = self._compute_z_score(green_cnt, position_cnt[p])
             z_score_per_position.append(z_score)
-            entropy_per_position.append(entropy(all_green_cnt + 1e5)) # soften in case zero exists
-
-            p_val = chisquare(np.array(all_green_cnt))[1]
+            # entropy_per_position.append(entropy(all_green_cnt + 1e5)) # soften in case zero exists
+            chi_test = chisquare(np.array(all_green_cnt))
+            p_val = chi_test[1]
             p_val_per_position.append(p_val)
+            entropy_per_position.append(chi_test[0])
 
 
         assert green_token_count == green_unique.sum()

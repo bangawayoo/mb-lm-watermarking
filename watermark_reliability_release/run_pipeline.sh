@@ -12,25 +12,25 @@ export HF_HOME=$HF_DATASETS_CACHE
 
 ### experiment types ###
 RUN_GEN=T
-RUN_ATT=F
+RUN_ATT=T
 RUN_EVAL=T
 ##########################
 
 ### generation related ###
-TOKEN_LEN="500"
+#TOKEN_LEN="500"
 #MODEL_PATH="/workspace/Public/llama-2-converted/llama-2-7b-chat/"
-MODEL_PATH="facebook/opt-1.3b"
-MIN_GEN=100 # number of valid samples to generate
+#MODEL_PATH="facebook/opt-1.3b"
+#MIN_GEN=100 # number of valid samples to generate
 SAMPLING=T
-BS=64 # batch size for generation
+#BS=64 # batch size for generation
 ##########################
 
 ### watermarking related ###
 SEED_SCH="selfhash"
 GAMMA=0.25
-DELTA="0.5"
-MSG_LEN=32 # bit-width
-RADIX=4
+#DELTA="2.0"
+#MSG_LEN=32 # bit-width
+#RADIX=4
 ZERO_BIT=F
 
 ## attack realted ##
@@ -39,7 +39,7 @@ srcp="80%"
 ##########################
 
 ### logging related ###
-OUTPUT_DIR="/test"
+OUTPUT_DIR="./test"
 WANDB=T
 ##########################
 
@@ -53,7 +53,7 @@ do
   # SRC_PCT="20% 40% 60% 80%"
 
   ### logging ###
-  RUN_NAME="32b"
+#  RUN_NAME="32b"
   GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
   echo "Running generation pipeline with output dir: $GENERATION_OUTPUT_DIR"
   ###############
