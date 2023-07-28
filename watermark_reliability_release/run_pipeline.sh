@@ -1,6 +1,8 @@
 #!/bin/bash
+export HF_ACCESS_TOKEN="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"
 export CUDA_VISIBLE_DEVICES="0"
 wandb offline
+huggingface-cli login --token $HF_ACCESS_TOKEN
 
 # Script to run the generation, attack, and evaluation steps of the pipeline
 export HF_HOME=$HF_DATASETS_CACHE
@@ -10,29 +12,34 @@ export HF_HOME=$HF_DATASETS_CACHE
 
 ### experiment types ###
 RUN_GEN=T
-RUN_ATT=T
+RUN_ATT=F
 RUN_EVAL=T
 ##########################
 
 ### generation related ###
-#LEN="200"
-#MODEL_PATH="facebook/opt-1.3b"
-#MIN_GEN=100 # number of valid samples to generate
+TOKEN_LEN="500"
+#MODEL_PATH="/workspace/Public/llama-2-converted/llama-2-7b-chat/"
+MODEL_PATH="facebook/opt-1.3b"
+MIN_GEN=100 # number of valid samples to generate
 SAMPLING=T
-#BS=1 # batch size for generation
+BS=128 # batch size for generation
 ##########################
 
 ### watermarking related ###
 SEED_SCH="selfhash"
 GAMMA=0.25
-DELTA="2"
-#MSG_LEN=16 # bit-width
-#RADIX=4
+DELTA="0.5"
+MSG_LEN=32 # bit-width
+RADIX=4
 ZERO_BIT=F
+
+## attack realted ##
+ATTACK_M=copy-paste
+srcp="80%"
 ##########################
 
 ### logging related ###
-OUTPUT_DIR="/experiments"
+OUTPUT_DIR="/test"
 WANDB=T
 ##########################
 
@@ -43,14 +50,13 @@ EVAL_METRICS="z-score"
 for del in $DELTA
 do
   # attack related
-  ATTACK_M=copy-paste
   # SRC_PCT="20% 40% 60% 80%"
-  srcp="80%"
 
-  # logging
-  RUN_NAME="test"
+  ### logging ###
+  RUN_NAME="32b"
   GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
   echo "Running generation pipeline with output dir: $GENERATION_OUTPUT_DIR"
+  ###############
 
   if [ $RUN_GEN == T ]
   then

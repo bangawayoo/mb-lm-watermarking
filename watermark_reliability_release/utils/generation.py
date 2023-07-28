@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import os
 import random
 import torch
 
@@ -37,7 +37,7 @@ from .data.essays import load_essays
 from .data.wikitext import load_wikitext
 
 MAX_GENERATIONS = int(10000)  # Hardcoded max length to avoid infinite loop
-
+HF_TOKEN = os.environ['HF_ACCESS_TOKEN']
 
 def load_model(args):
     """Load and return the model and tokenizer"""

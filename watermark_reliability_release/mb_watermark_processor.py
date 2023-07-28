@@ -550,14 +550,16 @@ class WatermarkDetector(WatermarkBase):
         # compute z-scores per position
         z_score_per_position = []
         p_val_per_position = []
+        entropy_per_position = []
         import numpy as np
-        from scipy.stats import chisquare
+        from scipy.stats import chisquare, entropy
         for p in range(1, ceil(self.message_length / self.chunk) + 1):
-            all_green_cnt = green_cnt_by_position[p]
+            all_green_cnt = np.array(green_cnt_by_position[p])
             green_cnt = max(all_green_cnt)
             green_cnt_diff = max(all_green_cnt) - min(all_green_cnt)
             z_score = self._compute_z_score(green_cnt, position_cnt[p])
             z_score_per_position.append(z_score)
+            entropy_per_position.append(entropy(all_green_cnt + 1e5)) # soften in case zero exists
 
             p_val = chisquare(np.array(all_green_cnt))[1]
             p_val_per_position.append(p_val)
@@ -574,8 +576,10 @@ class WatermarkDetector(WatermarkBase):
 
 
         if return_z_score_max:
-            z_score_sum = max(z_score_per_position)
-            score_dict.update(dict(z_score_max=z_score_sum))
+            z_score = self._compute_z_score(green_token_count, num_tokens_scored)
+            mean_entropy = np.mean(entropy_per_position)
+            # z_score_sum = max(z_score_per_position)
+            score_dict.update(dict(z_score_max=z_score - mean_entropy))
             score_dict.update(dict(chi_sq_p_val_min=-min(p_val_per_position)))
             score_dict.update(dict(chi_sq_p_val_sum=-sum(p_val_per_position)))
         if return_bit_match:
