@@ -1,7 +1,8 @@
 #!/bin/bash
-#export HF_ACCESS_TOKEN="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"
+export HF_ACCESS_TOKEN="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"
+export HF_DATASETS_CACHE="/experiments/.cache/"
 #export CUDA_VISIBLE_DEVICES="0"
-#huggingface-cli login --token $HF_ACCESS_TOKEN
+huggingface-cli login --token $HF_ACCESS_TOKEN
 
 # Script to run the generation, attack, and evaluation steps of the pipeline
 export HF_HOME=$HF_DATASETS_CACHE
