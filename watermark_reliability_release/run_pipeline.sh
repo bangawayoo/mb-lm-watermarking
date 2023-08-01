@@ -25,16 +25,16 @@ SAMPLING=T
 ##########################
 
 ### watermarking related ###
-SEED_SCH="selfhash"
-GAMMA=0.25
+#SEED_SCH="selfhash"
+#GAMMA=0.25
 #DELTA="2.0"
 #MSG_LEN=32 # bit-width
 #RADIX=4
 #ZERO_BIT=F
 
 ## attack realted ##
-ATTACK_M=copy-paste
-srcp="80%"
+#ATTACK_M=copy-paste
+#srcp="80%"
 ##########################
 
 ### logging related ###
