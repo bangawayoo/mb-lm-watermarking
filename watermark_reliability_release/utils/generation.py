@@ -30,6 +30,8 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoModelForCausalLM,
     DataCollatorWithPadding,
+    LlamaForCausalLM,
+    LlamaTokenizer
 )
 
 from .data.lfqa import load_lfqa
@@ -51,12 +53,13 @@ def load_model(args):
     if args.is_seq2seq_model:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path)
     elif args.is_decoder_only_model:
-        if args.load_fp16:
-            model = AutoModelForCausalLM.from_pretrained(
-                args.model_name_or_path, torch_dtype=torch.float16, device_map="auto"
-            )
-        else:
-            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+        model = LlamaForCausalLM(args.model_name_or_path)
+        # if args.load_fp16:
+        #     model = AutoModelForCausalLM.from_pretrained(
+        #         args.model_name_or_path, torch_dtype=torch.float16, device_map="auto"
+        #     )
+        # else:
+        #     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
     else:
         raise ValueError(f"Unknown model type: {args.model_name_or_path}")
 
