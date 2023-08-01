@@ -1,6 +1,6 @@
 #!/bin/bash
 export HF_ACCESS_TOKEN="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"
-export HF_DATASETS_CACHE="/experiments/.cache/"
+export HF_DATASETS_CACHE="/cache"
 #export CUDA_VISIBLE_DEVICES="0"
 huggingface-cli login --token $HF_ACCESS_TOKEN
 
