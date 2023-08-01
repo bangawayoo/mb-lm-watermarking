@@ -22,6 +22,8 @@ from functools import lru_cache
 import random
 
 import scipy.stats
+from scipy.stats import chisquare, entropy
+import numpy as np
 import torch
 from tokenizers import Tokenizer
 from transformers import LogitsProcessor
@@ -550,8 +552,6 @@ class WatermarkDetector(WatermarkBase):
         z_score_per_position = []
         p_val_per_position = []
         entropy_per_position = []
-        import numpy as np
-        from scipy.stats import chisquare, entropy
         for p in range(1, ceil(self.message_length / self.chunk) + 1):
             all_green_cnt = np.array(green_cnt_by_position[p])
             green_cnt = max(all_green_cnt)
@@ -559,9 +559,11 @@ class WatermarkDetector(WatermarkBase):
             z_score = self._compute_z_score(green_cnt, position_cnt[p])
             z_score_per_position.append(z_score)
             # entropy_per_position.append(entropy(all_green_cnt + 1e5)) # soften in case zero exists
-            chi_test = chisquare(np.array(all_green_cnt))
-            p_val = chi_test[1]
-            p_val_per_position.append(p_val)
+            if sum(all_green_cnt) == 0:
+                chi_test = [0, 0]
+            else:
+                chi_test = chisquare(np.array(all_green_cnt))
+            p_val_per_position.append(chi_test[1])
             entropy_per_position.append(chi_test[0])
 
 
