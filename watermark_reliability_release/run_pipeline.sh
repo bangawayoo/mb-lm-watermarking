@@ -1,8 +1,7 @@
 #!/bin/bash
-export HF_ACCESS_TOKEN="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"
-export CUDA_VISIBLE_DEVICES="0"
-wandb offline
-huggingface-cli login --token $HF_ACCESS_TOKEN
+#export HF_ACCESS_TOKEN="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"
+#export CUDA_VISIBLE_DEVICES="0"
+#huggingface-cli login --token $HF_ACCESS_TOKEN
 
 # Script to run the generation, attack, and evaluation steps of the pipeline
 export HF_HOME=$HF_DATASETS_CACHE
@@ -11,9 +10,9 @@ export HF_HOME=$HF_DATASETS_CACHE
 
 
 ### experiment types ###
-RUN_GEN=T
-RUN_ATT=T
-RUN_EVAL=T
+#RUN_GEN=T
+#RUN_ATT=T
+#RUN_EVAL=T
 ##########################
 
 ### generation related ###
@@ -31,7 +30,7 @@ GAMMA=0.25
 #DELTA="2.0"
 #MSG_LEN=32 # bit-width
 #RADIX=4
-ZERO_BIT=F
+#ZERO_BIT=F
 
 ## attack realted ##
 ATTACK_M=copy-paste
@@ -39,12 +38,12 @@ srcp="80%"
 ##########################
 
 ### logging related ###
-OUTPUT_DIR="./test"
+#OUTPUT_DIR="./test"
 WANDB=T
 ##########################
 
 ### evaluation related ###
-EVAL_METRICS="z-score"
+#EVAL_METRICS="repetition"
 ##########################
 
 for del in $DELTA

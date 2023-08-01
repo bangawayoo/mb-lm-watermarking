@@ -102,12 +102,11 @@ class WatermarkBase:
     def _get_greenlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         """Seed rng based on local context width and use this information to generate ids on the green list."""
         self._seed_rng(input_ids)
-
         greenlist_size = int(self.vocab_size * self.gamma)
         vocab_permutation = torch.randperm(
             self.vocab_size, device=input_ids.device, generator=self.rng
         )
-        candidate_greenlist = torch.chunk(vocab_permutation, self.base)
+        candidate_greenlist = torch.chunk(vocab_permutation, floor(1 / self.gamma))
         # random.seed(self.message_char)
         # g_idx = random.randint(0, len(candidate_greenlist) - 1)
         # return candidate_greenlist[g_idx]
@@ -277,7 +276,7 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
         scores = self._bias_greenlist_logits(
             scores=scores, greenlist_mask=green_tokens_mask, greenlist_bias=self.delta
         )
-        ## hard_listing ###
+        ## hardlisting ###
         # scores[~green_tokens_mask] = 0
         ##
 
@@ -516,7 +515,7 @@ class WatermarkDetector(WatermarkBase):
                     print(min(position_cnt.values()))
                     print(sum(position_cnt.values()))
                     print(position_cnt)
-                    # breakpoint()
+                    breakpoint()
 
         # use the predicted message to select ngram_to_watermark_lookup
         for ngram, green_token in ngram_to_watermark_lookup.items():
