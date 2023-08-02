@@ -1,14 +1,14 @@
 #!/bin/bash
 export HF_ACCESS_TOKEN="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"
+
 #export HF_DATASETS_CACHE="/cache"
+#export HF_HOME="/cache"
 #export CUDA_VISIBLE_DEVICES="0"
 huggingface-cli login --token $HF_ACCESS_TOKEN
 
 # Script to run the generation, attack, and evaluation steps of the pipeline
-export HF_HOME=$HF_DATASETS_CACHE
 # requires some OUTPUT_DIR to be set in the environment
 # as well as a path to the hf format LLAMA model
-
 
 ### experiment types ###
 #RUN_GEN=T
