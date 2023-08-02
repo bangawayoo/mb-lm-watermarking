@@ -1,6 +1,6 @@
 #!/bin/bash
 export HF_ACCESS_TOKEN="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"
-export HF_DATASETS_CACHE="/cache"
+#export HF_DATASETS_CACHE="/cache"
 #export CUDA_VISIBLE_DEVICES="0"
 huggingface-cli login --token $HF_ACCESS_TOKEN
 
@@ -83,7 +83,8 @@ do
         --output_dir="$GENERATION_OUTPUT_DIR" \
         --overwrite T \
         --message_length="$MSG_LEN" \
-        --generation_batch_size="$BS"
+        --generation_batch_size="$BS" \
+        --load_fp16 $FP16
   fi
 
   if [ $RUN_ATT == T ]

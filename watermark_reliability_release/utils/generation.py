@@ -53,12 +53,10 @@ def load_model(args):
     if args.is_seq2seq_model:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path)
     elif args.is_decoder_only_model:
-        if args.load_fp16:
-            model = AutoModelForCausalLM.from_pretrained(
-                args.model_name_or_path, torch_dtype=torch.float16, device_map="auto"
-            )
-        else:
-            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+        dtype =  torch.float16 if args.load_fp16 else torch.float32
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name_or_path, torch_dtype=dtype, device_map="auto"
+        )
     else:
         raise ValueError(f"Unknown model type: {args.model_name_or_path}")
 
