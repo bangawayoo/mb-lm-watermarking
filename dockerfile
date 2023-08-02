@@ -1,4 +1,4 @@
-FROM continuumio/miniconda3
+FROM pytorch/pytorch:1.13.0-cuda11.6-cudnn8-devel
 RUN conda install python=3.9
 
 # Install base utilities
