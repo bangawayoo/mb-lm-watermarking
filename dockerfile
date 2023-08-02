@@ -16,6 +16,7 @@ RUN apt-get update && \
     cmake \
     pkg-config \
     libgoogle-perftools-dev \
+    git-all \
     unzip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -29,6 +30,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Change ssh config and restart ssh
 RUN echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+RUN echo "PermitUserEnvironment yes" >> /etc/ssh/sshd_config
 
 # set environment variables
 ENV NLTK_DATA /workspace/.cache/NLTK_DATA
