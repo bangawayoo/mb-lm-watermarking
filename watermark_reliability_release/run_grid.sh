@@ -38,9 +38,10 @@ SAMPLING=T
 #srcp="80%"
 ##########################
 
+
 ### logging related ###
 #OUTPUT_DIR="./test"
-#WANDB=T
+WANDB=T
 ##########################
 GAMMA=("0.125" "0.125" "0.125" "0.25" "0.25" "0.5")
 RADIX=(2 4 8 2 4 2)
@@ -76,7 +77,7 @@ do
         --use_sampling $SAMPLING \
         --seeding_scheme=$SEED_SCH \
         --gamma="${GAMMA[$i]}" \
-        --delta=$del \
+        --delta=${DELTA} \
         --base="${RADIX[$i]}" \
         --zero_bit=$ZERO_BIT \
         --run_name="$RUN_NAME"_gen \
