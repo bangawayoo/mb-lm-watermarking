@@ -462,7 +462,7 @@ class WatermarkDetector(WatermarkBase):
             green_cnt_diff = max(all_green_cnt) - min(all_green_cnt)
             z_score = self._compute_z_score(green_cnt, position_cnt[p])
             z_score_per_position.append(z_score)
-            entropy_per_position.append(entropy(all_green_cnt + 1e5)) # soften in case zero exists
+            entropy_per_position.append(entropy(all_green_cnt))
             if sum(all_green_cnt) == 0:
                 chi_test = [0, 0]
             else:
@@ -490,7 +490,7 @@ class WatermarkDetector(WatermarkBase):
             weighted_chi = sum([c * p for c, p in zip(chi_per_position, pos_weights)])
             mean_entropy = np.mean(entropy_per_position)
             z_score_sum = max(z_score_per_position)
-            score_dict.update(dict(z_score_max=z_score - weighted_entropy))
+            score_dict.update(dict(z_score_max=weighted_z))
             score_dict.update(dict(entropy=-weighted_entropy))
             score_dict.update(dict(chi_sq=weighted_chi))
             score_dict.update(dict(chi_sq_p_val_min=-min(p_val_per_position)))
