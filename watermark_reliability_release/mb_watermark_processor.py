@@ -130,8 +130,8 @@ class WatermarkBase:
         converted_msg = ""
         for i in range(0, ceil(len(binary_msg) / self.chunk)):
             msg_chunk = binary_msg[i * self.chunk : (i+1) * self.chunk]
-            # left pad with zeros if msg chunk is shorter than chunk
-            msg_chunk = "0" * (self.chunk - len(msg_chunk)) + msg_chunk
+            # right pad with zeros if msg chunk is shorter than chunk
+            msg_chunk = msg_chunk + "0" * (self.chunk - len(msg_chunk))
             decimal = int(msg_chunk, 2)
             base_number = self._numberToBase(decimal, self.base)
             converted_msg += str(base_number)
@@ -278,7 +278,7 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
         scores = self._bias_greenlist_logits(
             scores=scores, greenlist_mask=green_tokens_mask, greenlist_bias=self.delta
         )
-        ## hardlisting ###
+        ## hardlisting for debugging ###
         # scores[~green_tokens_mask] = 0
         ##
 
@@ -342,9 +342,12 @@ class WatermarkDetector(WatermarkBase):
     ):
         # HF-style output dictionary
         score_dict = dict()
-        score_dict.update({'min_pos': float("nan")})
+        score_dict.update({'min_pos_ratio': float("nan")})
+        score_dict.update({'max_pos_ratio': float("nan")})
         score_dict.update(dict(chi_sq_p_val_min=float("nan")))
         score_dict.update(dict(chi_sq_p_val_sum=float("nan")))
+        score_dict.update(dict(entropy=float("nan")))
+        score_dict.update(dict(chi_sq=float("nan")))
 
         if return_z_score_max:
             score_dict.update(dict(z_score_max=float("nan")))
@@ -382,6 +385,159 @@ class WatermarkDetector(WatermarkBase):
             output_dict["prediction"] = False
 
         return output_dict
+
+
+    def _score_sequence(
+        self,
+        input_ids: torch.Tensor,
+        return_num_tokens_scored: bool = True,
+        return_num_green_tokens: bool = True,
+        return_green_fraction: bool = True,
+        return_green_token_mask: bool = False,
+        return_z_score: bool = True,
+        return_z_at_T: bool = True,
+        return_p_value: bool = True,
+        return_bit_match: bool = True,
+        return_z_score_max: bool =True,
+        message: str = "",
+        **kwargs,
+    ):
+        gold_message = message
+        ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position \
+            = self._score_ngrams_in_passage(input_ids)
+
+        # count positions for all tokens (for now count repeated tokens as well)
+        position_cnt = {}
+        for k, v in ngram_to_position_lookup.items():
+            freq = frequencies_table[k]
+            position_cnt[v] = position_cnt.get(v, 0) + freq
+        msg_prediction = []
+        for pos in range(1, ceil(self.message_length / self.chunk) + 1):
+            # find the index (digit) with the max counts of colorlist
+            pred, _ = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
+            if position_cnt.get(pos, None) is None:
+                position_cnt[pos] = -1
+            msg_prediction.append(pred)
+
+        # print(gold_message)
+        # print(msg_prediction)
+        # breakpoint()
+        # compute bit accuracy
+        matched_bits, total_bits = self._compute_ber(msg_prediction, gold_message)
+        if False:
+            if kwargs['col_name'] == "w_wm_output":
+                if matched_bits != total_bits:
+                    print(kwargs['text'])
+                    print(matched_bits / total_bits)
+                    print(min(position_cnt.values()))
+                    print(sum(position_cnt.values()))
+                    print(position_cnt)
+                    breakpoint()
+
+        # use the predicted message to select ngram_to_watermark_lookup
+        for ngram, green_token in ngram_to_watermark_lookup.items():
+            pos = ngram_to_position_lookup[ngram]
+            bit = msg_prediction[pos - 1]
+            ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][bit]
+
+        green_token_mask, green_unique, offsets = self._get_green_at_T_booleans(
+            input_ids, ngram_to_watermark_lookup
+        )
+
+        # Count up scores over all ngrams
+        if self.ignore_repeated_ngrams:
+            # Method that only counts a green/red hit once per unique ngram.
+            # New num total tokens scored (T) becomes the number unique ngrams.
+            # We iterate over all unique token ngrams in the input, computing the greenlist
+            # induced by the context in each, and then checking whether the last
+            # token falls in that greenlist.
+            num_tokens_scored = len(frequencies_table.keys())
+            green_token_count = sum(ngram_to_watermark_lookup.values())
+        else:
+            num_tokens_scored = sum(frequencies_table.values())
+            assert num_tokens_scored == len(input_ids) - self.context_width + self.self_salt, "Error for num_tokens_scored"
+            green_token_count = sum(
+                freq * outcome
+                for freq, outcome in zip(
+                    frequencies_table.values(), ngram_to_watermark_lookup.values()
+                )
+            )
+
+        # compute z-scores per position
+        z_score_per_position = []
+        p_val_per_position = []
+        entropy_per_position = []
+        chi_per_position = []
+        for p in range(1, ceil(self.message_length / self.chunk) + 1):
+            all_green_cnt = np.array(green_cnt_by_position[p])
+            green_cnt = max(all_green_cnt)
+            green_cnt_diff = max(all_green_cnt) - min(all_green_cnt)
+            z_score = self._compute_z_score(green_cnt, position_cnt[p])
+            z_score_per_position.append(z_score)
+            entropy_per_position.append(entropy(all_green_cnt + 1e5)) # soften in case zero exists
+            if sum(all_green_cnt) == 0:
+                chi_test = [0, 0]
+            else:
+                chi_test = chisquare(np.array(all_green_cnt))
+            p_val_per_position.append(chi_test[1])
+            chi_per_position.append(chi_test[0])
+
+
+        assert green_token_count == green_unique.sum()
+        # HF-style output dictionary
+        score_dict = dict()
+        # for k, v in position_cnt.items():
+        #     score_dict.update({f"pos_{k}": v})
+        min_val = min(position_cnt.values())
+        max_val = max(position_cnt.values())
+        sum_val = sum(position_cnt.values())
+        score_dict.update({'min_pos_ratio': min_val / sum_val})
+        score_dict.update({'max_pos_ratio': max_val / sum_val})
+
+        if return_z_score_max:
+            z_score = self._compute_z_score(green_token_count, num_tokens_scored)
+            pos_weights = [position_cnt[i] / sum_val for i in range(1, max(position_cnt))]
+            weighted_z = sum([z * p for z, p in zip(z_score_per_position, pos_weights)])
+            weighted_entropy = sum([e * p for e, p in zip(entropy_per_position, pos_weights)])
+            weighted_chi = sum([c * p for c, p in zip(chi_per_position, pos_weights)])
+            mean_entropy = np.mean(entropy_per_position)
+            z_score_sum = max(z_score_per_position)
+            score_dict.update(dict(z_score_max=z_score - weighted_entropy))
+            score_dict.update(dict(entropy=-weighted_entropy))
+            score_dict.update(dict(chi_sq=weighted_chi))
+            score_dict.update(dict(chi_sq_p_val_min=-min(p_val_per_position)))
+            score_dict.update(dict(chi_sq_p_val_sum=-sum(p_val_per_position)))
+        if return_bit_match:
+            score_dict.update(dict(bit_acc=matched_bits / total_bits))
+        if return_num_tokens_scored:
+            score_dict.update(dict(num_tokens_scored=num_tokens_scored))
+        if return_num_green_tokens:
+            score_dict.update(dict(num_green_tokens=green_token_count))
+        if return_green_fraction:
+            score_dict.update(dict(green_fraction=(green_token_count / num_tokens_scored)))
+        if return_z_score:
+            score_dict.update(
+                dict(z_score=self._compute_z_score(green_token_count, num_tokens_scored))
+            )
+        if return_p_value:
+            z_score = score_dict.get("z_score")
+            if z_score is None:
+                z_score = self._compute_z_score(green_token_count, num_tokens_scored)
+            score_dict.update(dict(p_value=self._compute_p_value(z_score)))
+        if return_green_token_mask:
+            score_dict.update(dict(green_token_mask=green_token_mask.tolist()))
+        if return_z_at_T:
+            # Score z_at_T separately:
+            sizes = torch.arange(1, len(green_unique) + 1)
+            seq_z_score_enum = torch.cumsum(green_unique, dim=0) - self.gamma * sizes
+            seq_z_score_denom = torch.sqrt(sizes * self.gamma * (1 - self.gamma))
+            z_score_at_effective_T = seq_z_score_enum / seq_z_score_denom
+            z_score_at_T = z_score_at_effective_T[offsets]
+            assert torch.isclose(z_score_at_T[-1], torch.tensor(z_score))
+
+            score_dict.update(dict(z_score_at_T=z_score_at_T))
+
+        return score_dict
 
     def _compute_z_score(self, observed_count, T):
         """
@@ -470,151 +626,6 @@ class WatermarkDetector(WatermarkBase):
                 torch.tensor(green_token_mask_unique),
                 torch.tensor(offsets),
                 )
-
-    def _score_sequence(
-        self,
-        input_ids: torch.Tensor,
-        return_num_tokens_scored: bool = True,
-        return_num_green_tokens: bool = True,
-        return_green_fraction: bool = True,
-        return_green_token_mask: bool = False,
-        return_z_score: bool = True,
-        return_z_at_T: bool = True,
-        return_p_value: bool = True,
-        return_bit_match: bool = True,
-        return_z_score_max: bool =True,
-        message: str = "",
-        **kwargs,
-    ):
-        gold_message = message
-        ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position \
-            = self._score_ngrams_in_passage(input_ids)
-
-        # count positions for all tokens (for now count repeated tokens as well)
-        position_cnt = {}
-        for k, v in ngram_to_position_lookup.items():
-            freq = frequencies_table[k]
-            position_cnt[v] = position_cnt.get(v, 0) + freq
-
-        msg_prediction = []
-        for pos in range(1, ceil(self.message_length / self.chunk) + 1):
-            # find the index (digit) with the max counts of colorlist
-            pred, _ = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
-            if position_cnt.get(pos, None) is None:
-                position_cnt[pos] = -1
-            msg_prediction.append(pred)
-
-        # print(gold_message)
-        # print(msg_prediction)
-        # breakpoint()
-        # compute bit accuracy
-        matched_bits, total_bits = self._compute_ber(msg_prediction, gold_message)
-        if False:
-            if kwargs['col_name'] == "w_wm_output":
-                if matched_bits != total_bits:
-                    print(kwargs['text'])
-                    print(matched_bits / total_bits)
-                    print(min(position_cnt.values()))
-                    print(sum(position_cnt.values()))
-                    print(position_cnt)
-                    breakpoint()
-
-        # use the predicted message to select ngram_to_watermark_lookup
-        for ngram, green_token in ngram_to_watermark_lookup.items():
-            pos = ngram_to_position_lookup[ngram]
-            bit = msg_prediction[pos - 1]
-            ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][bit]
-
-        green_token_mask, green_unique, offsets = self._get_green_at_T_booleans(
-            input_ids, ngram_to_watermark_lookup
-        )
-
-        # Count up scores over all ngrams
-        if self.ignore_repeated_ngrams:
-            # Method that only counts a green/red hit once per unique ngram.
-            # New num total tokens scored (T) becomes the number unique ngrams.
-            # We iterate over all unique token ngrams in the input, computing the greenlist
-            # induced by the context in each, and then checking whether the last
-            # token falls in that greenlist.
-            num_tokens_scored = len(frequencies_table.keys())
-            green_token_count = sum(ngram_to_watermark_lookup.values())
-        else:
-            num_tokens_scored = sum(frequencies_table.values())
-            assert num_tokens_scored == len(input_ids) - self.context_width + self.self_salt, "Error for num_tokens_scored"
-            green_token_count = sum(
-                freq * outcome
-                for freq, outcome in zip(
-                    frequencies_table.values(), ngram_to_watermark_lookup.values()
-                )
-            )
-
-        # compute z-scores per position
-        z_score_per_position = []
-        p_val_per_position = []
-        entropy_per_position = []
-        for p in range(1, ceil(self.message_length / self.chunk) + 1):
-            all_green_cnt = np.array(green_cnt_by_position[p])
-            green_cnt = max(all_green_cnt)
-            green_cnt_diff = max(all_green_cnt) - min(all_green_cnt)
-            z_score = self._compute_z_score(green_cnt, position_cnt[p])
-            z_score_per_position.append(z_score)
-            # entropy_per_position.append(entropy(all_green_cnt + 1e5)) # soften in case zero exists
-            if sum(all_green_cnt) == 0:
-                chi_test = [0, 0]
-            else:
-                chi_test = chisquare(np.array(all_green_cnt))
-            p_val_per_position.append(chi_test[1])
-            entropy_per_position.append(chi_test[0])
-
-
-        assert green_token_count == green_unique.sum()
-        # HF-style output dictionary
-        score_dict = dict()
-        # for k, v in position_cnt.items():
-        #     score_dict.update({f"pos_{k}": v})
-        min_val = min(position_cnt.values())
-        sum_val = sum(position_cnt.values())
-        score_dict.update({'min_pos': min_val})
-
-
-        if return_z_score_max:
-            z_score = self._compute_z_score(green_token_count, num_tokens_scored)
-            mean_entropy = np.mean(entropy_per_position)
-            # z_score_sum = max(z_score_per_position)
-            score_dict.update(dict(z_score_max=z_score - mean_entropy))
-            score_dict.update(dict(chi_sq_p_val_min=-min(p_val_per_position)))
-            score_dict.update(dict(chi_sq_p_val_sum=-sum(p_val_per_position)))
-        if return_bit_match:
-            score_dict.update(dict(bit_acc=matched_bits / total_bits))
-        if return_num_tokens_scored:
-            score_dict.update(dict(num_tokens_scored=num_tokens_scored))
-        if return_num_green_tokens:
-            score_dict.update(dict(num_green_tokens=green_token_count))
-        if return_green_fraction:
-            score_dict.update(dict(green_fraction=(green_token_count / num_tokens_scored)))
-        if return_z_score:
-            score_dict.update(
-                dict(z_score=self._compute_z_score(green_token_count, num_tokens_scored))
-            )
-        if return_p_value:
-            z_score = score_dict.get("z_score")
-            if z_score is None:
-                z_score = self._compute_z_score(green_token_count, num_tokens_scored)
-            score_dict.update(dict(p_value=self._compute_p_value(z_score)))
-        if return_green_token_mask:
-            score_dict.update(dict(green_token_mask=green_token_mask.tolist()))
-        if return_z_at_T:
-            # Score z_at_T separately:
-            sizes = torch.arange(1, len(green_unique) + 1)
-            seq_z_score_enum = torch.cumsum(green_unique, dim=0) - self.gamma * sizes
-            seq_z_score_denom = torch.sqrt(sizes * self.gamma * (1 - self.gamma))
-            z_score_at_effective_T = seq_z_score_enum / seq_z_score_denom
-            z_score_at_T = z_score_at_effective_T[offsets]
-            assert torch.isclose(z_score_at_T[-1], torch.tensor(z_score))
-
-            score_dict.update(dict(z_score_at_T=z_score_at_T))
-
-        return score_dict
 
     def _score_windows_impl_batched(
         self,
@@ -745,12 +756,17 @@ class WatermarkDetector(WatermarkBase):
         # chunk length will determine the number of digits. e.g. for base=4, chunk=2
         chunk = min(self.chunk, self.message_length)
         binary_pred = "".join([format(int(char), f"0{chunk}b") for char in pred_msg])
-        if len(binary_pred) != len(message):
+
+        # predicted binary message is longer because the last chunk was right-padded
+        if len(binary_pred) > len(message):
+            # truncate
+            binary_pred = binary_pred[:len(message)]
+        elif len(binary_pred) < len(message):
             print(pred_msg)
             print(binary_pred)
             print(message)
             breakpoint()
-            raise RuntimeError("Extracted message length is different from the original message!")
+            raise RuntimeError("Extracted message length is shorter the original message!")
 
         match = 0
         total = 0

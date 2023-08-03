@@ -109,6 +109,8 @@ MAUVE_TEXT_PAIR_COLUMN_NAMES = OUTPUT_TEXT_PAIR_COLUMN_NAMES
 
 
 ROC_TEST_STAT_SUFFIXES = [
+    "entropy",
+    "chi_sq",
     "chi_sq_p_val_min",
     "chi_sq_p_val_sum",
     "z_score",
