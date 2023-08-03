@@ -162,6 +162,7 @@ def main(args):
         seeding_scheme=args.seeding_scheme,
         store_spike_ents=args.store_spike_ents,
         select_green_tokens=True,
+        message_length=args.message_length,
     )
 
     ###########################################################################

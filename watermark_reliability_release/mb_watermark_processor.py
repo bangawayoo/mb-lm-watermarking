@@ -61,18 +61,19 @@ class WatermarkBase:
 
         ### Parameters for multi-bit watermarking ###
         self.message_length = message_length
+        decimal = int("1" * message_length, 2)
+        self.converted_msg_length = len(self._numberToBase(decimal, base))
+
         # if message bit width is leq to 2, no need to increase base
         if message_length <= 2:
             base = 2
         self.message = None
         self.bit_position = None
         self.base = base
-        self.chunk = int(ceil(log2(base)))
-        # update gamma if base is larger than 2
-        if self.base > 2:
-            self.gamma = 1 / self.base
-            # round down to two decimals
-            self.gamma = floor(self.gamma * 100) / 100.0
+        # self.chunk = int(ceil(log2(base)))
+        assert floor(1 / self.gamma) >= base, f"Only {floor(1 / self.gamma)} chunks available " \
+                                              f"with current gamma={self.gamma}," \
+                                              f"But base is {self.base}"
         self.converted_message = None
         self.message_char = None
 
@@ -96,7 +97,7 @@ class WatermarkBase:
         )
         # seeding for bit position
         random.seed(prf_key % (2**64 - 1))
-        self.bit_position = random.randint(1, len(self.converted_message))
+        self.bit_position = random.randint(1, self.converted_msg_length)
         self.message_char = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
         self.rng.manual_seed(prf_key % (2**64 - 1))  # safeguard against overflow from long
@@ -109,9 +110,6 @@ class WatermarkBase:
             self.vocab_size, device=input_ids.device, generator=self.rng
         )
         candidate_greenlist = torch.chunk(vocab_permutation, floor(1 / self.gamma))
-        # random.seed(self.message_char)
-        # g_idx = random.randint(0, len(candidate_greenlist) - 1)
-        # return candidate_greenlist[g_idx]
         return candidate_greenlist[self.message_char]
 
     def get_current_bit(self, bit_position):
@@ -124,17 +122,10 @@ class WatermarkBase:
         self.message = binary_msg
         self.converted_message = self._convert_binary_to_base(binary_msg)
 
-    def _convert_binary_to_base(self, binary_msg):
-        if self.base == 2:
-            return binary_msg
-        converted_msg = ""
-        for i in range(0, ceil(len(binary_msg) / self.chunk)):
-            msg_chunk = binary_msg[i * self.chunk : (i+1) * self.chunk]
-            # right pad with zeros if msg chunk is shorter than chunk
-            msg_chunk = msg_chunk + "0" * (self.chunk - len(msg_chunk))
-            decimal = int(msg_chunk, 2)
-            base_number = self._numberToBase(decimal, self.base)
-            converted_msg += str(base_number)
+    def _convert_binary_to_base(self, binary_msg: str):
+        decimal = int(binary_msg, 2)
+        converted_msg = self._numberToBase(decimal, self.base)
+        converted_msg = "0" * (self.converted_msg_length - len(converted_msg)) + converted_msg
         return converted_msg
 
     def _numberToBase(self, n, b):
@@ -142,15 +133,12 @@ class WatermarkBase:
         https://stackoverflow.com/a/28666223
         """
         if n == 0:
-            return 0
+            return str(0)
         digits = []
         while n:
             digits.append(int(n % b))
             n //= b
-        # if chunking is done correctly, this should be a single digit
-        assert len(digits) == 1, "Make sure binary message conversion is right"
-        output = digits[0]
-        return output
+        return "".join(map(str, digits[::-1]))
 
 
 class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
@@ -412,7 +400,7 @@ class WatermarkDetector(WatermarkBase):
             freq = frequencies_table[k]
             position_cnt[v] = position_cnt.get(v, 0) + freq
         msg_prediction = []
-        for pos in range(1, ceil(self.message_length / self.chunk) + 1):
+        for pos in range(1, self.converted_msg_length + 1):
             # find the index (digit) with the max counts of colorlist
             pred, _ = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
             if position_cnt.get(pos, None) is None:
@@ -468,7 +456,7 @@ class WatermarkDetector(WatermarkBase):
         p_val_per_position = []
         entropy_per_position = []
         chi_per_position = []
-        for p in range(1, ceil(self.message_length / self.chunk) + 1):
+        for p in range(1, self.converted_msg_length + 1):
             all_green_cnt = np.array(green_cnt_by_position[p])
             green_cnt = max(all_green_cnt)
             green_cnt_diff = max(all_green_cnt) - min(all_green_cnt)
@@ -557,9 +545,9 @@ class WatermarkDetector(WatermarkBase):
         return p_value
 
     @lru_cache(maxsize=2**32)
-    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, message: str):
+    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, message_char: int):
         """Expensive re-seeding and sampling is cached."""
-        self.converted_message = message
+        self.converted_message = str(message_char) * self.converted_msg_length
         # Handle with care, should ideally reset on __getattribute__ access to self.prf_type, self.context_width, self.self_salt, self.hash_key
         greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
         return True if target in greenlist_ids else False, self.get_current_position()
@@ -585,9 +573,8 @@ class WatermarkDetector(WatermarkBase):
         for idx, ngram_example in enumerate(frequencies_table.keys()):
             prefix = ngram_example if self.self_salt else ngram_example[:-1]
             target = ngram_example[-1]
-            for m in range(self.base):
-                message = str(m) * ceil(self.message_length / self.chunk)
-                greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, message)
+            for cand_msg in range(self.base):
+                greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, cand_msg)
                 ngram_to_watermark_lookup[ngram_example].append(greenlist_flag)
                 # position is chosen independently of the message content
                 # so looping through the message will not change the current position
@@ -595,7 +582,7 @@ class WatermarkDetector(WatermarkBase):
 
                 # mark the color list
                 if greenlist_flag:
-                    green_cnt_by_position[current_position][m] += 1
+                    green_cnt_by_position[current_position][cand_msg] += 1
         return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position
 
     def _get_green_at_T_booleans(self, input_ids, ngram_to_watermark_lookup) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -752,15 +739,13 @@ class WatermarkDetector(WatermarkBase):
 
     def _compute_ber(self, pred_msg: list, message: str):
         pred_msg = "".join(map(str, pred_msg))
-        # change each character to binary base.
-        # chunk length will determine the number of digits. e.g. for base=4, chunk=2
-        chunk = min(self.chunk, self.message_length)
-        binary_pred = "".join([format(int(char), f"0{chunk}b") for char in pred_msg])
+        decimal = int(pred_msg, self.base)
+        binary_pred = format(decimal, f"0{self.message_length}b")
 
         # predicted binary message is longer because the last chunk was right-padded
         if len(binary_pred) > len(message):
             # truncate
-            binary_pred = binary_pred[:len(message)]
+            binary_pred = binary_pred[-len(message):]
         elif len(binary_pred) < len(message):
             print(pred_msg)
             print(binary_pred)
