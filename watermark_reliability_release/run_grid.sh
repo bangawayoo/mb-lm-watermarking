@@ -77,7 +77,7 @@ do
         --use_sampling $SAMPLING \
         --seeding_scheme=$SEED_SCH \
         --gamma="${GAMMA[$i]}" \
-        --delta=${DELTA} \
+        --delta="${DELTA}" \
         --base="${RADIX[$i]}" \
         --zero_bit=$ZERO_BIT \
         --run_name="$RUN_NAME"_gen \
