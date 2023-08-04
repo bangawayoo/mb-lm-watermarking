@@ -11,7 +11,7 @@ evaluate
 numpy
 scikit-learn
 tqdm
-urllib3 < 1.27
+#urllib3
 requests
 pytest
 faiss-gpu
