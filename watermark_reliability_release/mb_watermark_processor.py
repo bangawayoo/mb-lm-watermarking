@@ -98,7 +98,7 @@ class WatermarkBase:
             input_ids[-self.context_width :], salt_key=self.hash_key
         )
         if self.use_position_prf:
-            position_prf_key = prf_lookup["selfhash"](
+            position_prf_key = prf_lookup["anchored_minhash_prf"](
                 input_ids[-2:], salt_key=self.hash_key
             )
         else:
