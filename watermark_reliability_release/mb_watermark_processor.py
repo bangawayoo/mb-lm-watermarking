@@ -42,6 +42,7 @@ class WatermarkBase:
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
         base: int = 2,  # base (radix) of each message
         message_length: int = 4,
+        use_position_prf: bool = True,
     ):
         # patch now that None could now maybe be passed as seeding_scheme
         if seeding_scheme is None:
@@ -76,6 +77,7 @@ class WatermarkBase:
                                               f"But base is {self.base}"
         self.converted_message = None
         self.message_char = None
+        self.use_position_prf = use_position_prf
 
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
@@ -95,8 +97,14 @@ class WatermarkBase:
         prf_key = prf_lookup[self.prf_type](
             input_ids[-self.context_width :], salt_key=self.hash_key
         )
+        if self.use_position_prf:
+            position_prf_key = prf_lookup["additive_prf"](
+                input_ids[-1:], salt_key=self.hash_key
+            )
+        else:
+            position_prf_key = prf_key
         # seeding for bit position
-        random.seed(prf_key % (2**64 - 1))
+        random.seed(position_prf_key % (2**64 - 1))
         self.bit_position = random.randint(1, self.converted_msg_length)
         self.message_char = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
