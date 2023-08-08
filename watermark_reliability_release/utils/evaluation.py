@@ -172,6 +172,7 @@ def load_detector(args):
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
     device = "cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu"
+    args.use_position_prf = False
     wm_kwargs = {
         'use_position_prf': args.use_position_prf,
     }

@@ -120,8 +120,22 @@ class WatermarkBase:
         candidate_greenlist = torch.chunk(vocab_permutation, floor(1 / self.gamma))
         return candidate_greenlist[self.message_char]
 
+    def _get_colorlist_ids(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        """Seed rng based on local context width and use this information to generate ids on the green list."""
+        self._seed_rng(input_ids)
+        vocab_permutation = torch.randperm(
+            self.vocab_size, device=input_ids.device, generator=self.rng
+        )
+        colorlist = torch.chunk(vocab_permutation, floor(1 / self.gamma))
+        return colorlist
+
     def get_current_bit(self, bit_position):
-        return int(self.converted_message[bit_position - 1])
+        # embedding stage
+        if self.converted_message:
+            return int(self.converted_message[bit_position - 1])
+        # extraction stage
+        else:
+            return 0
 
     def get_current_position(self):
         return self.bit_position
@@ -408,11 +422,15 @@ class WatermarkDetector(WatermarkBase):
             freq = frequencies_table[k]
             position_cnt[v] = position_cnt.get(v, 0) + freq
         msg_prediction = []
+        green_token_count_debug = 0
         for pos in range(1, self.converted_msg_length + 1):
             # find the index (digit) with the max counts of colorlist
-            pred, _ = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
-            if position_cnt.get(pos, None) is None:
+            if position_cnt.get(pos) is None: # no allocated tokens (may happen when T / b is small)
                 position_cnt[pos] = -1
+                pred = random.sample(list(range(self.base)), 1)[0]
+            else:
+                pred, val = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
+                green_token_count_debug += val
             msg_prediction.append(pred)
 
         # print(gold_message)
@@ -433,8 +451,8 @@ class WatermarkDetector(WatermarkBase):
         # use the predicted message to select ngram_to_watermark_lookup
         for ngram, green_token in ngram_to_watermark_lookup.items():
             pos = ngram_to_position_lookup[ngram]
-            bit = msg_prediction[pos - 1]
-            ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][bit]
+            msg = msg_prediction[pos - 1]
+            ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][msg]
 
         green_token_mask, green_unique, offsets = self._get_green_at_T_booleans(
             input_ids, ngram_to_watermark_lookup
@@ -458,7 +476,6 @@ class WatermarkDetector(WatermarkBase):
                     frequencies_table.values(), ngram_to_watermark_lookup.values()
                 )
             )
-
         # compute z-scores per position
         z_score_per_position = []
         p_val_per_position = []
@@ -512,6 +529,9 @@ class WatermarkDetector(WatermarkBase):
         if return_green_fraction:
             score_dict.update(dict(green_fraction=(green_token_count / num_tokens_scored)))
         if return_z_score:
+            z_score = score_dict.get("z_score")
+            if z_score is None:
+                z_score = self._compute_z_score(green_token_count, num_tokens_scored)
             score_dict.update(
                 dict(z_score=self._compute_z_score(green_token_count, num_tokens_scored))
             )
@@ -553,12 +573,23 @@ class WatermarkDetector(WatermarkBase):
         return p_value
 
     @lru_cache(maxsize=2**32)
-    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, message_char: int):
+    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, cand_msg=None):
         """Expensive re-seeding and sampling is cached."""
-        self.converted_message = str(message_char) * self.converted_msg_length
+        # self.converted_message = str(message_char) * self.converted_msg_length
+        ######################
         # Handle with care, should ideally reset on __getattribute__ access to self.prf_type, self.context_width, self.self_salt, self.hash_key
-        greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
-        return True if target in greenlist_ids else False, self.get_current_position()
+        # greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
+        # return True if target in greenlist_ids else False, self.get_current_position()
+        ######################
+        colorlist_ids = self._get_colorlist_ids(torch.as_tensor(prefix, device=self.device))
+        colorlist_flag = []
+        for cl in colorlist_ids[:self.base]:
+            if target in cl:
+                colorlist_flag.append(True)
+            else:
+                colorlist_flag.append(False)
+
+        return colorlist_flag, self.get_current_position()
 
     def _score_ngrams_in_passage(self, input_ids: torch.Tensor):
         """Core function to gather all ngrams in the input and compute their watermark."""
@@ -581,16 +612,24 @@ class WatermarkDetector(WatermarkBase):
         for idx, ngram_example in enumerate(frequencies_table.keys()):
             prefix = ngram_example if self.self_salt else ngram_example[:-1]
             target = ngram_example[-1]
-            for cand_msg in range(self.base):
-                greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, cand_msg)
-                ngram_to_watermark_lookup[ngram_example].append(greenlist_flag)
-                # position is chosen independently of the message content
-                # so looping through the message will not change the current position
-                ngram_to_position_lookup[ngram_example] = current_position
+            colorlist_flag, current_position = self._get_ngram_score_cached(prefix, target)
+            ngram_to_watermark_lookup[ngram_example] = colorlist_flag
+            ngram_to_position_lookup[ngram_example] = current_position
+            for cand_msg, flag in enumerate(colorlist_flag):
+                if flag:
+                    green_cnt_by_position[current_position][cand_msg] += frequencies_table[ngram_example]
 
-                # mark the color list
-                if greenlist_flag:
-                    green_cnt_by_position[current_position][cand_msg] += 1
+            # for cand_msg in range(self.base):
+            #     greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, cand_msg)
+            #     ngram_to_watermark_lookup[ngram_example].append(greenlist_flag)
+            # #     position is chosen independently of the message content
+            # #     so looping through the message will not change the current position
+            #     ngram_to_position_lookup[ngram_example] = current_position
+            #     # mark the color list
+            #     if greenlist_flag:
+            #         green_cnt_by_position[current_position][cand_msg] += frequencies_table[ngram_example]
+
+
         return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position
 
     def _get_green_at_T_booleans(self, input_ids, ngram_to_watermark_lookup) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
