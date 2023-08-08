@@ -77,6 +77,7 @@ do
         --delta=$del \
         --base=$RADIX \
         --zero_bit=$ZERO_BIT \
+        --use_position_prf=$USE_PPRF \
         --run_name="$RUN_NAME"_gen \
         --wandb=$WANDB \
         --verbose=True \

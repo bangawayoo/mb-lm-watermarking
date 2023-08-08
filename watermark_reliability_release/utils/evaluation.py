@@ -172,7 +172,9 @@ def load_detector(args):
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
     device = "cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu"
-
+    wm_kwargs = {
+        'use_position_prf': args.use_position_prf,
+    }
     watermark_detector = WatermarkDetector(
         vocab=list(tokenizer.get_vocab().values()),
         gamma=args.gamma,
@@ -184,6 +186,7 @@ def load_detector(args):
         ignore_repeated_ngrams=args.ignore_repeated_ngrams,
         message_length=args.message_length,
         base=args.base,
+        **wm_kwargs
     )
 
     return watermark_detector

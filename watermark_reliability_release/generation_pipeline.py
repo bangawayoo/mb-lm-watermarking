@@ -153,7 +153,9 @@ def main(args):
     ###########################################################################
     # Construct the watermark processor
     ###########################################################################
-
+    wm_kwargs = {
+            'use_position_prf': args.use_position_prf,
+                 }
     watermark_processor = WatermarkLogitsProcessor(
         vocab=list(tokenizer.get_vocab().values()),
         gamma=args.gamma,
@@ -163,6 +165,7 @@ def main(args):
         store_spike_ents=args.store_spike_ents,
         select_green_tokens=True,
         message_length=args.message_length,
+        **wm_kwargs
     )
 
     ###########################################################################
@@ -557,6 +560,13 @@ if __name__ == "__main__":
         default=False,
         help="When true, this is a special case of zero-bit; all messages are set to 0.",
     )
+    parser.add_argument(
+        "--use_position_prf",
+        type=str2bool,
+        default=False,
+        help="When true, the position seed will be determined by a different prf scheme"
+    )
+
 
     parser.add_argument(
         "--verbose",
