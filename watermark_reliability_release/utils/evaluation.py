@@ -212,7 +212,7 @@ def compute_z_score(
     if input_text == "":
         error = True
     else:
-        debug = False
+        debug = args.debug
         if debug:
             score_dict = watermark_detector.detect(
                 input_text,
@@ -223,7 +223,8 @@ def compute_z_score(
                 convert_to_float=True,  # this helps with integrity under NaNs
                 return_z_at_T=args.compute_scores_at_T,
                 message=example['message'],
-                col_name=text_column_name
+                col_name=text_column_name,
+                position=example['sampled_positions'],
             )
         else:
             try:
@@ -237,6 +238,8 @@ def compute_z_score(
                     return_z_at_T=args.compute_scores_at_T,
                     message=example['message'],
                     col_name=text_column_name,
+                    position=example['sampled_positions'],
+
                 )
             except ValueError as err:
                 print(err)
@@ -281,6 +284,15 @@ def compute_z_scores(example, watermark_detector=None, args=None):
             example = compute_z_score(
                 example, text_column_name=col_name, watermark_detector=watermark_detector, args=args
             )
+        if "w_wm_output_attacked" in example and col_name == "w_wm_output":
+            gt_positions = example['w_wm_output_sampled_positions']
+        if col_name == "w_wm_output_attacked":
+            corrupted_positions = example['w_wm_output_attacked_sampled_positions']
+
+    if "w_wm_output_attacked" in example:
+        match_cnt = sum([x == y for x, y in zip(corrupted_positions, gt_positions)])
+        example['corrupted_position_match'] = match_cnt / len(gt_positions)
+
     return example
 
 

@@ -1277,6 +1277,11 @@ if __name__ == "__main__":
         default=True,
         help="Whether to log the raw tabular metric data to wandb.",
     )
+    parser.add_argument(
+        "--debug",
+        type=str2bool,
+        default=False
+    )
     # watermarking related
     parser.add_argument(
         "--message_length",

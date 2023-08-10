@@ -78,7 +78,8 @@ class WatermarkBase:
         self.converted_message = None
         self.message_char = None
         self.use_position_prf = use_position_prf
-
+        self.bit_position_list = []
+        # self.position_increment = 0
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
         """Initialize all internal settings of the seeding strategy from a colloquial, "public" name for the scheme."""
@@ -106,6 +107,7 @@ class WatermarkBase:
         # seeding for bit position
         random.seed(position_prf_key % (2**64 - 1))
         self.bit_position = random.randint(1, self.converted_msg_length)
+        # self.bit_position = list(range(1, self.converted_msg_length))[self.position_increment % self.converted_msg_length + 1]
         self.message_char = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
         self.rng.manual_seed(prf_key % (2**64 - 1))  # safeguard against overflow from long
@@ -161,6 +163,10 @@ class WatermarkBase:
             digits.append(int(n % b))
             n //= b
         return "".join(map(str, digits[::-1]))
+    def flush_position(self):
+        positions = "".join(list(map(str, self.bit_position_list)))
+        self.bit_position_list = []
+        return [positions]
 
 
 class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
@@ -275,6 +281,7 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
             else:
                 greenlist_ids = self._get_greenlist_ids(input_seq)
             list_of_greenlist_ids[b_idx] = greenlist_ids
+            self.bit_position_list.append(self.bit_position)
 
             # logic for computing and storing spike entropies for analysis
             if self.store_spike_ents:
@@ -358,6 +365,8 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update(dict(chi_sq_p_val_sum=float("nan")))
         score_dict.update(dict(entropy=float("nan")))
         score_dict.update(dict(chi_sq=float("nan")))
+        score_dict.update(dict(sampled_positions=""))
+        score_dict.update(dict(position_acc=float("nan")))
 
         if return_z_score_max:
             score_dict.update(dict(z_score_max=float("nan")))
@@ -420,7 +429,11 @@ class WatermarkDetector(WatermarkBase):
         position_cnt = {}
         for k, v in ngram_to_position_lookup.items():
             freq = frequencies_table[k]
-            position_cnt[v] = position_cnt.get(v, 0) + freq
+            if self.ignore_repeated_ngrams:
+                position_cnt[v] = position_cnt.get(v, 0) + 1
+            else:
+                position_cnt[v] = position_cnt.get(v, 0) + freq
+
         msg_prediction = []
         green_token_count_debug = 0
         for pos in range(1, self.converted_msg_length + 1):
@@ -476,6 +489,7 @@ class WatermarkDetector(WatermarkBase):
                     frequencies_table.values(), ngram_to_watermark_lookup.values()
                 )
             )
+        assert green_token_count == green_token_count_debug, "Debug: green_token_count != green_token_count_debug"
         # compute z-scores per position
         z_score_per_position = []
         p_val_per_position = []
@@ -495,10 +509,22 @@ class WatermarkDetector(WatermarkBase):
             p_val_per_position.append(chi_test[1])
             chi_per_position.append(chi_test[0])
 
+        position_list = []
+        ngram = {}
+        # loop through tokens to get the sampled positions
+        for idx in range(self.context_width, len(input_ids)):
+            prefix = tuple(input_ids[idx - self.context_width:idx].tolist())
+            target = input_ids[-1]
+            colorlist_flag, current_position = self._get_ngram_score_cached(prefix, target)
+            ngram[prefix] = current_position
+            position_list.append(current_position)
 
         assert green_token_count == green_unique.sum()
         # HF-style output dictionary
         score_dict = dict()
+        sampled_positions = "".join(list(map(str, position_list)))
+        score_dict.update(dict(sampled_positions=sampled_positions))
+
         # for k, v in position_cnt.items():
         #     score_dict.update({f"pos_{k}": v})
         min_val = min(position_cnt.values())
@@ -575,8 +601,8 @@ class WatermarkDetector(WatermarkBase):
     @lru_cache(maxsize=2**32)
     def _get_ngram_score_cached(self, prefix: tuple[int], target: int, cand_msg=None):
         """Expensive re-seeding and sampling is cached."""
-        # self.converted_message = str(message_char) * self.converted_msg_length
         ######################
+        # self.converted_message = str(cand_msg) * self.converted_msg_length
         # Handle with care, should ideally reset on __getattribute__ access to self.prf_type, self.context_width, self.self_salt, self.hash_key
         # greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
         # return True if target in greenlist_ids else False, self.get_current_position()
@@ -618,17 +644,17 @@ class WatermarkDetector(WatermarkBase):
             for cand_msg, flag in enumerate(colorlist_flag):
                 if flag:
                     green_cnt_by_position[current_position][cand_msg] += frequencies_table[ngram_example]
-
+            ##############################
             # for cand_msg in range(self.base):
             #     greenlist_flag, current_position = self._get_ngram_score_cached(prefix, target, cand_msg)
             #     ngram_to_watermark_lookup[ngram_example].append(greenlist_flag)
-            # #     position is chosen independently of the message content
-            # #     so looping through the message will not change the current position
-            #     ngram_to_position_lookup[ngram_example] = current_position
-            #     # mark the color list
-            #     if greenlist_flag:
-            #         green_cnt_by_position[current_position][cand_msg] += frequencies_table[ngram_example]
-
+            #     position is chosen independently of the message content
+            #     so looping through the message will not change the current position
+                # ngram_to_position_lookup[ngram_example] = current_position
+                # mark the color list
+                # if greenlist_flag:
+                #     green_cnt_by_position[current_position][cand_msg] += frequencies_table[ngram_example]
+            ##############################
 
         return ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position
 
@@ -790,13 +816,10 @@ class WatermarkDetector(WatermarkBase):
         binary_pred = format(decimal, f"0{self.message_length}b")
 
         # predicted binary message is longer because the last chunk was right-padded
-        if len(binary_pred) > len(message):
-            # truncate
-            binary_pred = binary_pred[-len(message):]
-        elif len(binary_pred) < len(message):
-            print(pred_msg)
-            print(binary_pred)
-            print(message)
+        if len(binary_pred) != len(message):
+            print(f"Predicted msg: {pred_msg}")
+            print(f"Predicted binary msg: {binary_pred}")
+            print(f"Gold msg: {message}")
             breakpoint()
             raise RuntimeError("Extracted message length is shorter the original message!")
 
@@ -866,8 +889,16 @@ class WatermarkDetector(WatermarkBase):
         else:
             kwargs['text'] = text
             score_dict = self._score_sequence(tokenized_text, **kwargs)
+
         if return_scores:
             output_dict.update(score_dict)
+            # score sampled positions
+            gold_position = kwargs['position'][self.context_width:]
+            position = score_dict['sampled_positions']
+            match_cnt = sum([x == y for x, y in zip(gold_position, position)])
+            output_dict.update(dict(position_acc=match_cnt / len(position)))
+
+
         # if passed return_prediction then perform the hypothesis test and return the outcome
         if return_prediction:
             z_threshold = z_threshold if z_threshold else self.z_threshold

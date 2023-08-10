@@ -95,7 +95,7 @@ do
         --run_name="${RUN_NAME}_${ATTACK_M}-attack" \
         --wandb=$WANDB \
         --cp_attack_insertion_len "${srcp}" \
-        --cp_attack_type triple-single \
+        --cp_attack_type single-single \
         --input_dir="$GENERATION_OUTPUT_DIR" \
         --verbose=True --overwrite_output_file T
   fi
@@ -112,6 +112,7 @@ do
         --evaluation_metrics=$EVAL_METRICS \
         --message_length="$MSG_LEN" \
         --base=$RADIX \
-        --target_T="$TOKEN_LEN"
+        --target_T="$TOKEN_LEN" \
+        --debug=$DEBUG
   fi
 done

@@ -484,6 +484,7 @@ def generate(
         if args.generation_seed is not None:
             torch.manual_seed(args.generation_seed)
         output_with_watermark = generate_with_watermark(input_ids=input_ids)
+        sampled_positions = watermark_processor.flush_position()
 
     if args.is_decoder_only_model:
         # need to isolate the newly generated tokens
@@ -504,11 +505,11 @@ def generate(
     #         decoded_output_without_watermark[idx] = " "
     #     if len(decoded_output_with_watermark[idx]):
     #         decoded_output_with_watermark[idx] = " "
-
     examples.update(
         {
             "no_wm_output": decoded_output_without_watermark,
             "w_wm_output": decoded_output_with_watermark,
+            "sampled_positions": sampled_positions,
             "message": messages,
             "no_wm_output_length": (output_without_watermark != tokenizer.pad_token_id)
             .sum(dim=-1)
