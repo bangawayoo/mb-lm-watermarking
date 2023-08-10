@@ -209,6 +209,10 @@ def main(args):
         # some rows are skipped/not attacked/NOOP. Since the attacked col
         # is set to the empty string, and length 0, the detection code
         # including the baselines 🤞🏼 will ignore these rows one way or another
+        if args.cp_attack_type == "triple-single":
+            args.cp_attack_num_insertions = 3
+        elif args.cp_attack_type == "single-single":
+            args.cp_attack_num_insertions = 1
 
         # convert cp_attack_insertion_len to int
         if "%" in args.cp_attack_insertion_len:
@@ -220,6 +224,7 @@ def main(args):
                 int((int(args.cp_attack_insertion_len[:-1]) / 100) * args.max_new_tokens)
                 // args.cp_attack_num_insertions
             )
+
             # check that this is not more than args.max_new_tokens total
             assert (
                 args.cp_attack_insertion_len * args.cp_attack_num_insertions <= args.max_new_tokens
@@ -441,7 +446,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cp_attack_type",
         type=str,
-        default="single-single",
+        default="triple-single",
         choices=["single-single", "triple-single", "k-t"],
         help="Type of copy-paste attack to be run.",
     )
