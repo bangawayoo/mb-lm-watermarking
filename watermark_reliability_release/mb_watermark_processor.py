@@ -104,9 +104,10 @@ class WatermarkBase:
             )
         else:
             position_prf_key = prf_key
+        self.prf_key = prf_key
+
         # seeding for bit position
         random.seed(position_prf_key % (2**64 - 1))
-        self.bit_position = random.randint(1, self.converted_msg_length)
         self.bit_position = list(range(1, self.converted_msg_length + 1))[self.position_increment % self.converted_msg_length]
         self.message_char = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
@@ -282,6 +283,12 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
             list_of_greenlist_ids[b_idx] = greenlist_ids
             self.position_increment += 1
             self.bit_position_list.append(self.bit_position)
+            # print("****RNG****")
+            # print(f"prefix={input_ids[:, -self.context_width:]}")
+            # print(f"PRF={self.prf_key}")
+            # print(f"Gen. position={self.bit_position}")
+            # print(f"Colorlist={self.message_char}")
+            # print("\n\n")
 
             # logic for computing and storing spike entropies for analysis
             if self.store_spike_ents:
@@ -430,29 +437,31 @@ class WatermarkDetector(WatermarkBase):
         ngram_to_position_lookup = {}
         ngram_to_watermark_lookup = {}
         green_cnt_by_position = {i: [0 for _ in range(self.base)] for i in range(1, self.converted_msg_length + 1)}
-        increment = self.context_width
+        increment = self.context_width - self.self_salt
         # loop through tokens to get the sampled positions
-        for idx in range(self.context_width, len(input_ids)):
+        for idx in range(self.context_width, len(input_ids) + self.self_salt):
             pos = increment % self.converted_msg_length + 1
-            ngram = input_ids[idx - self.context_width: idx + 1]
+            ngram = input_ids[idx - self.context_width: idx + 1 - self.self_salt]
             target = ngram[-1]
             prefix = ngram if self.self_salt else ngram[:-1]
-            greenlist = self._get_greenlist_ids(prefix)
             prefix = tuple(prefix.tolist())
+            # print(f"***prefix={prefix}, target={target}****")
             ngram = tuple(ngram.tolist())
             colorlist_flag, current_position = self._get_ngram_score_cached(prefix, target)
             for f_idx, flag in enumerate(colorlist_flag):
                 if flag:
-                    if kwargs['col_name'] == "w_wm_output":
-                        print(f"position: {pos}")
-                        print(f"colorlist: {f_idx}")
+                    # if kwargs['col_name'] == "w_wm_output":
+                        # print(f"PRF: {self.prf_key}")
+                        # print(f"position: {pos}")
+                        # print(f"colorlist: {f_idx}")
                         # breakpoint()
-                        print("\n\n")
+                        # print("\n\n")
                     green_cnt_by_position[pos][f_idx] += 1
             ngram_to_watermark_lookup[ngram] = colorlist_flag
             position_list.append(pos)
             ngram_to_position_lookup[ngram] = pos
             increment += 1
+
 
 
         ##########

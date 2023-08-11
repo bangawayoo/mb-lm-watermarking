@@ -292,7 +292,10 @@ def compute_z_scores(example, watermark_detector=None, args=None):
 
     if "w_wm_output_attacked" in example:
         match_cnt = sum([x == y for x, y in zip(corrupted_positions, gt_positions)])
-        example['corrupted_position_match'] = match_cnt / len(gt_positions)
+        try:
+            example['corrupted_position_match'] = match_cnt / len(gt_positions)
+        except:
+            example['corrupted_position_match'] = float("nan")
 
     return example
 
