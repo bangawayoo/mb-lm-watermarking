@@ -207,6 +207,7 @@ def compute_z_score(
     if args.normalizers != []:
         return_green_token_mask = None
 
+    watermark_detector.position_increment = 0
     input_text = example[text_column_name]
     error = False
     if input_text == "":
@@ -286,7 +287,7 @@ def compute_z_scores(example, watermark_detector=None, args=None):
             )
         if "w_wm_output_attacked" in example and col_name == "w_wm_output":
             gt_positions = example['w_wm_output_sampled_positions']
-        if col_name == "w_wm_output_attacked":
+        if "w_wm_output_attacked" in example and col_name == "w_wm_output_attacked":
             corrupted_positions = example['w_wm_output_attacked_sampled_positions']
 
     if "w_wm_output_attacked" in example:

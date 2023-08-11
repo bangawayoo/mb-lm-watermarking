@@ -485,6 +485,7 @@ def generate(
             torch.manual_seed(args.generation_seed)
         output_with_watermark = generate_with_watermark(input_ids=input_ids)
         sampled_positions = watermark_processor.flush_position()
+        watermark_processor.position_increment = 0
 
     if args.is_decoder_only_model:
         # need to isolate the newly generated tokens

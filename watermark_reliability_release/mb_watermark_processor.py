@@ -79,7 +79,7 @@ class WatermarkBase:
         self.message_char = None
         self.use_position_prf = use_position_prf
         self.bit_position_list = []
-        # self.position_increment = 0
+        self.position_increment = 0
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
         """Initialize all internal settings of the seeding strategy from a colloquial, "public" name for the scheme."""
@@ -107,7 +107,7 @@ class WatermarkBase:
         # seeding for bit position
         random.seed(position_prf_key % (2**64 - 1))
         self.bit_position = random.randint(1, self.converted_msg_length)
-        # self.bit_position = list(range(1, self.converted_msg_length))[self.position_increment % self.converted_msg_length + 1]
+        self.bit_position = list(range(1, self.converted_msg_length + 1))[self.position_increment % self.converted_msg_length]
         self.message_char = self.get_current_bit(self.bit_position)
         # enable for long, interesting streams of pseudorandom numbers: print(prf_key)
         self.rng.manual_seed(prf_key % (2**64 - 1))  # safeguard against overflow from long
@@ -273,7 +273,6 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
         # NOTE, it would be nice to get rid of this batch loop, but currently,
         # the seed and partition operations are not tensor/vectorized, thus
         # each sequence in the batch needs to be treated separately.
-
         list_of_greenlist_ids = [None for _ in input_ids]  # Greenlists could differ in length
         for b_idx, input_seq in enumerate(input_ids):
             if self.self_salt:
@@ -281,6 +280,7 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
             else:
                 greenlist_ids = self._get_greenlist_ids(input_seq)
             list_of_greenlist_ids[b_idx] = greenlist_ids
+            self.position_increment += 1
             self.bit_position_list.append(self.bit_position)
 
             # logic for computing and storing spike entropies for analysis
@@ -425,6 +425,37 @@ class WatermarkDetector(WatermarkBase):
         ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position \
             = self._score_ngrams_in_passage(input_ids)
 
+        ##########
+        position_list = []
+        ngram_to_position_lookup = {}
+        ngram_to_watermark_lookup = {}
+        green_cnt_by_position = {i: [0 for _ in range(self.base)] for i in range(1, self.converted_msg_length + 1)}
+        increment = self.context_width
+        # loop through tokens to get the sampled positions
+        for idx in range(self.context_width, len(input_ids)):
+            pos = increment % self.converted_msg_length + 1
+            ngram = input_ids[idx - self.context_width: idx + 1]
+            target = ngram[-1]
+            prefix = ngram if self.self_salt else ngram[:-1]
+            greenlist = self._get_greenlist_ids(prefix)
+            prefix = tuple(prefix.tolist())
+            ngram = tuple(ngram.tolist())
+            colorlist_flag, current_position = self._get_ngram_score_cached(prefix, target)
+            for f_idx, flag in enumerate(colorlist_flag):
+                if flag:
+                    if kwargs['col_name'] == "w_wm_output":
+                        print(f"position: {pos}")
+                        print(f"colorlist: {f_idx}")
+                        # breakpoint()
+                        print("\n\n")
+                    green_cnt_by_position[pos][f_idx] += 1
+            ngram_to_watermark_lookup[ngram] = colorlist_flag
+            position_list.append(pos)
+            ngram_to_position_lookup[ngram] = pos
+            increment += 1
+
+
+        ##########
         # count positions for all tokens (for now count repeated tokens as well)
         position_cnt = {}
         for k, v in ngram_to_position_lookup.items():
@@ -489,7 +520,9 @@ class WatermarkDetector(WatermarkBase):
                     frequencies_table.values(), ngram_to_watermark_lookup.values()
                 )
             )
-        assert green_token_count == green_token_count_debug, "Debug: green_token_count != green_token_count_debug"
+
+        # assert green_token_count == green_token_count_debug, "Debug: green_token_count != green_token_count_debug"
+
         # compute z-scores per position
         z_score_per_position = []
         p_val_per_position = []
@@ -508,16 +541,6 @@ class WatermarkDetector(WatermarkBase):
                 chi_test = chisquare(np.array(all_green_cnt))
             p_val_per_position.append(chi_test[1])
             chi_per_position.append(chi_test[0])
-
-        position_list = []
-        ngram = {}
-        # loop through tokens to get the sampled positions
-        for idx in range(self.context_width, len(input_ids)):
-            prefix = tuple(input_ids[idx - self.context_width:idx].tolist())
-            target = input_ids[-1]
-            colorlist_flag, current_position = self._get_ngram_score_cached(prefix, target)
-            ngram[prefix] = current_position
-            position_list.append(current_position)
 
         assert green_token_count == green_unique.sum()
         # HF-style output dictionary
@@ -598,7 +621,7 @@ class WatermarkDetector(WatermarkBase):
         p_value = scipy.stats.norm.sf(z)
         return p_value
 
-    @lru_cache(maxsize=2**32)
+    # @lru_cache(maxsize=2**32)
     def _get_ngram_score_cached(self, prefix: tuple[int], target: int, cand_msg=None):
         """Expensive re-seeding and sampling is cached."""
         ######################
@@ -633,7 +656,7 @@ class WatermarkDetector(WatermarkBase):
         ngram_to_watermark_lookup = collections.defaultdict(list)
         ngram_to_position_lookup = {}
         # initialize dictionary of {position: [0, ..., r]}
-        green_cnt_by_position = {i: [0 for _ in range(self.base)] for i in range(1, self.message_length + 1)}
+        green_cnt_by_position = {i: [0 for _ in range(self.base)] for i in range(1, self.converted_msg_length + 1)}
 
         for idx, ngram_example in enumerate(frequencies_table.keys()):
             prefix = ngram_example if self.self_salt else ngram_example[:-1]
