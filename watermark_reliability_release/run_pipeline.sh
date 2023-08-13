@@ -74,7 +74,7 @@ do
         --use_sampling $SAMPLING \
         --seeding_scheme=$SEED_SCH \
         --gamma=$GAMMA \
-        --delta=$del \
+        --delta=$DELTA \
         --base=$RADIX \
         --zero_bit=$ZERO_BIT \
         --use_position_prf=$USE_PPRF \
@@ -95,7 +95,7 @@ do
         --run_name="${RUN_NAME}_${ATTACK_M}-attack" \
         --wandb=$WANDB \
         --cp_attack_insertion_len "${srcp}" \
-        --cp_attack_type single-single \
+        --cp_attack_type=$CP_ATT_TYPE \
         --input_dir="$GENERATION_OUTPUT_DIR" \
         --verbose=True --overwrite_output_file T
   fi
