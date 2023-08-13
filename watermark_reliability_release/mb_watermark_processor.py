@@ -432,7 +432,7 @@ class WatermarkDetector(WatermarkBase):
         ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position \
             = self._score_ngrams_in_passage(input_ids)
 
-        ##########
+        ########## sequential extraction #########
         position_list = []
         ngram_to_position_lookup = {}
         ngram_to_watermark_lookup = {}
@@ -462,9 +462,7 @@ class WatermarkDetector(WatermarkBase):
             ngram_to_position_lookup[ngram] = pos
             increment += 1
 
-
-
-        ##########
+        ##############################################
         # count positions for all tokens (for now count repeated tokens as well)
         position_cnt = {}
         for k, v in ngram_to_position_lookup.items():
