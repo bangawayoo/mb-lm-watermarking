@@ -78,6 +78,7 @@ do
         --base=$RADIX \
         --zero_bit=$ZERO_BIT \
         --use_position_prf=$USE_PPRF \
+        --use_fixed_position=$USE_FIXP \
         --run_name="$RUN_NAME"_gen \
         --wandb=$WANDB \
         --verbose=True \

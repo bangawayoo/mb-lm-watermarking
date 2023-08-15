@@ -155,7 +155,9 @@ def main(args):
     ###########################################################################
     wm_kwargs = {
             'use_position_prf': args.use_position_prf,
+            'use_fixed_position': args.use_fixed_position,
                  }
+
     watermark_processor = WatermarkLogitsProcessor(
         vocab=list(tokenizer.get_vocab().values()),
         gamma=args.gamma,
@@ -565,6 +567,12 @@ if __name__ == "__main__":
         type=str2bool,
         default=False,
         help="When true, the position seed will be determined by a different prf scheme"
+    )
+    parser.add_argument(
+        "--use_fixed_position",
+        type=str2bool,
+        default=False,
+        help="When true, the position seed will be sampled with a fixed seed (rotation)"
     )
 
 

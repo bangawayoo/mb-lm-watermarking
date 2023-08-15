@@ -175,6 +175,7 @@ def load_detector(args):
     args.use_position_prf = False
     wm_kwargs = {
         'use_position_prf': args.use_position_prf,
+        'use_fixed_position': args.use_fixed_position,
     }
     watermark_detector = WatermarkDetector(
         vocab=list(tokenizer.get_vocab().values()),
