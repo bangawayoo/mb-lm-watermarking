@@ -592,7 +592,8 @@ def main(args):
 
         # Save filtered mean values:
         for metric_name in series_column_names:
-            filtered_name = f"f_{target_T}p{upper_tolerance}m{lower_tolerance}_{metric_name}"
+            # filtered_name = f"f_{target_T}p{upper_tolerance}m{lower_tolerance}_{metric_name}"
+            filtered_name = f"filtered_{metric_name}"
             try:
                 run.summary[f"{filtered_name}_mean"] = filtered_table[metric_name].mean()
                 run.summary[f"{filtered_name}_std"] = filtered_table[metric_name].std()
