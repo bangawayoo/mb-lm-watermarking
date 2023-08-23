@@ -381,6 +381,7 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update(dict(chi_sq=float("nan")))
         score_dict.update(dict(sampled_positions=""))
         score_dict.update(dict(position_acc=float("nan")))
+        score_dict.update(dict(bit_match=float("nan")))
 
         if return_z_score_max:
             score_dict.update(dict(z_score_max=float("nan")))
@@ -561,6 +562,7 @@ class WatermarkDetector(WatermarkBase):
             score_dict.update(dict(chi_sq_p_val_sum=-sum(p_val_per_position)))
         if return_bit_match:
             score_dict.update(dict(bit_acc=matched_bits / total_bits))
+            score_dict.update(dict(bit_match=matched_bits==total_bits))
         if return_num_tokens_scored:
             score_dict.update(dict(num_tokens_scored=num_tokens_scored))
         if return_num_green_tokens:
