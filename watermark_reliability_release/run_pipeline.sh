@@ -113,6 +113,7 @@ do
         --evaluation_metrics=$EVAL_METRICS \
         --message_length="$MSG_LEN" \
         --base=$RADIX \
+        --ignore_repeated_ngrams=$IGNORE_R_NGRAM \
         --target_T="$TOKEN_LEN" \
         --debug=$DEBUG
   fi

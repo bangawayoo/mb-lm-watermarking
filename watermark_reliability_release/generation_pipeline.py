@@ -156,6 +156,7 @@ def main(args):
     wm_kwargs = {
             'use_position_prf': args.use_position_prf,
             'use_fixed_position': args.use_fixed_position,
+            'code_length': 32
                  }
 
     watermark_processor = WatermarkLogitsProcessor(
@@ -549,6 +550,12 @@ if __name__ == "__main__":
         type=int,
         default=4,
         help="Number of bits of message to watermark",
+    )
+    parser.add_argument(
+        "--code_length",
+        type=int,
+        default=32,
+        help="Length of the actual code to watermark when using error correcting algoritm",
     )
     parser.add_argument(
         "--base",

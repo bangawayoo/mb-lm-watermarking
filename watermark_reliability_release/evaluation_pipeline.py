@@ -152,7 +152,6 @@ def main(args):
 
     cmdline_args = args.__dict__.copy()
     prev_gen_table_meta = read_json(gen_table_meta_path)
-
     joined_args = prev_gen_table_meta.copy()
     for k, v in cmdline_args.items():
         if v is not None:

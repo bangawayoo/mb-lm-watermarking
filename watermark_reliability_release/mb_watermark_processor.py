@@ -42,6 +42,7 @@ class WatermarkBase:
         select_green_tokens: bool = True,  # should always be the default if not running in legacy mode
         base: int = 2,  # base (radix) of each message
         message_length: int = 4,
+        code_length: int = 4,
         use_position_prf: bool = True,
         use_fixed_position: bool = False,
     ):
@@ -62,7 +63,8 @@ class WatermarkBase:
         self.select_green_tokens = select_green_tokens
 
         ### Parameters for multi-bit watermarking ###
-        self.message_length = message_length
+        self.original_msg_length = message_length
+        self.message_length = max(message_length, code_length)
         decimal = int("1" * message_length, 2)
         self.converted_msg_length = len(self._numberToBase(decimal, base))
 
@@ -290,12 +292,6 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
             if self.use_fixed_position:
                 self.position_increment += 1
             self.bit_position_list.append(self.bit_position)
-            # print("****RNG****")
-            # print(f"prefix={input_ids[:, -self.context_width:]}")
-            # print(f"PRF={self.prf_key}")
-            # print(f"Gen. position={self.bit_position}")
-            # print(f"Colorlist={self.message_char}")
-            # print("\n\n")
 
             # logic for computing and storing spike entropies for analysis
             if self.store_spike_ents:
@@ -382,6 +378,8 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update(dict(sampled_positions=""))
         score_dict.update(dict(position_acc=float("nan")))
         score_dict.update(dict(bit_match=float("nan")))
+        score_dict.update(dict(cand_match=float("nan")))
+        score_dict.update(dict(cand_acc=float("nan")))
 
         if return_z_score_max:
             score_dict.update(dict(z_score_max=float("nan")))
@@ -437,8 +435,6 @@ class WatermarkDetector(WatermarkBase):
         **kwargs,
     ):
         gold_message = message
-        # dummy positions
-        position_list = [0,0,0,0]
         ########## sequential extraction #########
         if True:
             ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position, \
@@ -446,6 +442,8 @@ class WatermarkDetector(WatermarkBase):
         else:
             ngram_to_watermark_lookup, frequencies_table, ngram_to_position_lookup, green_cnt_by_position \
                 = self._score_ngrams_in_passage(input_ids)
+            # dummy positions
+            position_list = [0,0,0,0]
         ##############################################
         # count positions for all tokens (for now count repeated tokens as well)
         position_cnt = {}
@@ -456,23 +454,17 @@ class WatermarkDetector(WatermarkBase):
             else:
                 position_cnt[v] = position_cnt.get(v, 0) + freq
 
-        msg_prediction = []
-        green_token_count_debug = 0
-        for pos in range(1, self.converted_msg_length + 1):
-            # find the index (digit) with the max counts of colorlist
-            if position_cnt.get(pos) is None: # no allocated tokens (may happen when T / b is small)
-                position_cnt[pos] = -1
-                pred = random.sample(list(range(self.base)), 1)[0]
-            else:
-                pred, val = max(enumerate(green_cnt_by_position[pos]), key=lambda x: x[1])
-                green_token_count_debug += val
-            msg_prediction.append(pred)
-
-        # print(gold_message)
-        # print(msg_prediction)
-        # breakpoint()
+        # predict message
+        msg_prediction_list = self._predict_message(position_cnt, green_cnt_by_position)
         # compute bit accuracy
-        matched_bits, total_bits = self._compute_ber(msg_prediction, gold_message)
+        best_prediction = msg_prediction_list[0]
+        correct_bits, total_bits = self._compute_ber(best_prediction, gold_message)
+        prediction_results = []
+        for msg in msg_prediction_list:
+            cb, tb = self._compute_ber(msg, gold_message)
+            prediction_results.append(cb)
+
+
         if False:
             if kwargs['col_name'] == "w_wm_output":
                 if matched_bits != total_bits:
@@ -486,7 +478,7 @@ class WatermarkDetector(WatermarkBase):
         # use the predicted message to select ngram_to_watermark_lookup
         for ngram, green_token in ngram_to_watermark_lookup.items():
             pos = ngram_to_position_lookup[ngram]
-            msg = msg_prediction[pos - 1]
+            msg = best_prediction[pos - 1]
             ngram_to_watermark_lookup[ngram] = ngram_to_watermark_lookup[ngram][msg]
 
         green_token_mask, green_unique, offsets = self._get_green_at_T_booleans(
@@ -561,8 +553,10 @@ class WatermarkDetector(WatermarkBase):
             score_dict.update(dict(chi_sq_p_val_min=-min(p_val_per_position)))
             score_dict.update(dict(chi_sq_p_val_sum=-sum(p_val_per_position)))
         if return_bit_match:
-            score_dict.update(dict(bit_acc=matched_bits / total_bits))
-            score_dict.update(dict(bit_match=matched_bits==total_bits))
+            score_dict.update(dict(bit_acc=correct_bits / total_bits))
+            score_dict.update(dict(bit_match=correct_bits == total_bits))
+            score_dict.update(dict(cand_match=max(prediction_results) == total_bits))
+            score_dict.update(dict(cand_acc=max(prediction_results) / total_bits))
         if return_num_tokens_scored:
             score_dict.update(dict(num_tokens_scored=num_tokens_scored))
         if return_num_green_tokens:
@@ -608,6 +602,42 @@ class WatermarkDetector(WatermarkBase):
         denom = sqrt(T * expected_count * (1 - expected_count))
         z = numer / denom
         return z
+
+
+    def _predict_message(self, position_cnt, green_cnt_by_position, num_candidates=20):
+        msg_prediction = []
+        confidence_per_pos = []
+        green_token_count_debug = 0
+        for pos in range(1, self.converted_msg_length + 1):
+            # find the index (digit) with the max counts of colorlist
+            if position_cnt.get(pos) is None: # no allocated tokens (may happen when T / b is small)
+                position_cnt[pos] = -1
+                pred = random.sample(list(range(self.base)), 1)[0]
+            else:
+                green_counts = green_cnt_by_position[pos]
+                pred, val = max(enumerate(green_counts), key=lambda x: x[1])
+                sorted_idx = np.argsort(green_counts)
+                max_idx, next_idx = sorted_idx[-1], sorted_idx[-2]
+                conf = green_counts[max_idx] - green_counts[next_idx]
+                confidence_per_pos.append((conf, max_idx, next_idx, pos))
+                green_token_count_debug += val
+            msg_prediction.append(pred)
+
+        msg_prediction_list = [msg_prediction]
+        confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])
+        cnt = 0
+        # iterator of 1 edits, 2 edits, and so on
+        candidate_iter = iter(powerset(confidence_per_pos))
+        while cnt < num_candidates:
+            candidate = next(candidate_iter)
+            cand_msg = msg_prediction.copy()
+            for _, max_idx, next_idx, pos in candidate:
+                cand_msg = msg_prediction.copy()
+                cand_msg[pos - 1] = next_idx
+            msg_prediction_list.append(cand_msg)
+            cnt += 1
+
+        return msg_prediction_list
 
     def _compute_p_value(self, z):
         p_value = scipy.stats.norm.sf(z)
@@ -865,9 +895,20 @@ class WatermarkDetector(WatermarkBase):
         return score_dict
 
     def _compute_ber(self, pred_msg: list, message: str):
+        from reedmuller import reedmuller
+
         pred_msg = "".join(map(str, pred_msg))
         decimal = int(pred_msg, self.base)
         binary_pred = format(decimal, f"0{self.message_length}b")
+        use_ecc = False
+        if use_ecc:
+            rm = reedmuller.ReedMuller(2, 5)
+            decoded = rm.decode(list(map(int, binary_pred)))
+            print(decoded)
+            if decoded:
+                binary_pred = ''.join(map(str, decoded))
+            else:
+                binary_pred = binary_pred[:self.original_msg_length]
 
         # predicted binary message is longer because the last chunk was right-padded
         if len(binary_pred) != len(message):
@@ -952,7 +993,6 @@ class WatermarkDetector(WatermarkBase):
             match_cnt = sum([x == y for x, y in zip(gold_position, position)])
             output_dict.update(dict(position_acc=match_cnt / len(position)))
 
-
         # if passed return_prediction then perform the hypothesis test and return the outcome
         if return_prediction:
             z_threshold = z_threshold if z_threshold else self.z_threshold
@@ -996,3 +1036,11 @@ def ngrams(sequence, n, pad_left=False, pad_right=False, pad_symbol=None):
         for _ in range(i):  # iterate through every order of ngrams
             next(sub_iterable, None)  # generate the ngrams within the window.
     return zip(*iterables)  # Unpack and flattens the iterables.
+
+
+from itertools import chain, combinations
+
+def powerset(iterable):
+    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))

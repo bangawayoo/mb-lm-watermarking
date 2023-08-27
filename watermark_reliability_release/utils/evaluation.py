@@ -173,9 +173,11 @@ def load_detector(args):
 
     device = "cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu"
     args.use_position_prf = False
+    args.code_length = 16
     wm_kwargs = {
         'use_position_prf': args.use_position_prf,
         'use_fixed_position': args.use_fixed_position,
+        'code_length': args.code_length
     }
     watermark_detector = WatermarkDetector(
         vocab=list(tokenizer.get_vocab().values()),
