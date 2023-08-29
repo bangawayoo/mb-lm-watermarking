@@ -1348,4 +1348,13 @@ if __name__ == "__main__":
     # split window settings
     args.window_settings = args.window_settings.split(",")
 
+    # check if added params are in the args namespace
+    args_dict = vars(args)
+    if not args_dict.get("use_position_prf"):
+        args.use_position_prf = False
+    if not args_dict.get("code_length"):
+        args.code_length = 16
+    if not args_dict.get("fixed_position"):
+        args.use_fixed_position = False
+
     main(args)
