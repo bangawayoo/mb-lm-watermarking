@@ -72,6 +72,7 @@ do
         --input_filtering_strategy=prompt_and_completion_length \
         --output_filtering_strategy=max_new_tokens \
         --use_sampling $SAMPLING \
+        --num_beam $NUM_BEAMS \
         --seeding_scheme=$SEED_SCH \
         --gamma=$GAMMA \
         --delta=$del \

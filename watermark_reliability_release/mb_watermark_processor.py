@@ -22,7 +22,7 @@ from functools import lru_cache
 import random
 
 import scipy.stats
-from scipy.stats import chisquare, entropy
+from scipy.stats import chisquare, entropy, binom
 import numpy as np
 import torch
 from tokenizers import Tokenizer
@@ -371,10 +371,7 @@ class WatermarkDetector(WatermarkBase):
         score_dict = dict()
         score_dict.update({'min_pos_ratio': float("nan")})
         score_dict.update({'max_pos_ratio': float("nan")})
-        score_dict.update(dict(chi_sq_p_val_min=float("nan")))
-        score_dict.update(dict(chi_sq_p_val_sum=float("nan")))
-        score_dict.update(dict(entropy=float("nan")))
-        score_dict.update(dict(chi_sq=float("nan")))
+        score_dict.update(dict(custom_metric=float("nan")))
         score_dict.update(dict(sampled_positions=""))
         score_dict.update(dict(position_acc=float("nan")))
         score_dict.update(dict(bit_match=float("nan")))
@@ -454,8 +451,17 @@ class WatermarkDetector(WatermarkBase):
             else:
                 position_cnt[v] = position_cnt.get(v, 0) + freq
 
+        # compute confidence per position
+        p_val_per_position = []
+        for p in range(1, self.converted_msg_length + 1):
+            all_green_cnt = np.array(green_cnt_by_position[p])
+            green_cnt = max(all_green_cnt)
+            T = position_cnt.get(p, -1)
+            binom_pval = self._compute_binom_p_val(green_cnt, T)
+            p_val_per_position.append(binom_pval)
+
         # predict message
-        msg_prediction_list = self._predict_message(position_cnt, green_cnt_by_position)
+        msg_prediction_list = self._predict_message(position_cnt, green_cnt_by_position, p_val_per_position)
         # compute bit accuracy
         best_prediction = msg_prediction_list[0]
         correct_bits, total_bits = self._compute_ber(best_prediction, gold_message)
@@ -506,52 +512,19 @@ class WatermarkDetector(WatermarkBase):
 
         # assert green_token_count == green_token_count_debug, "Debug: green_token_count != green_token_count_debug"
 
-        # compute z-scores per position
-        z_score_per_position = []
-        p_val_per_position = []
-        entropy_per_position = []
-        chi_per_position = []
-        for p in range(1, self.converted_msg_length + 1):
-            all_green_cnt = np.array(green_cnt_by_position[p])
-            green_cnt = max(all_green_cnt)
-            green_cnt_diff = max(all_green_cnt) - min(all_green_cnt)
-            z_score = self._compute_z_score(green_cnt, position_cnt[p])
-            z_score_per_position.append(z_score)
-            entropy_per_position.append(entropy(all_green_cnt))
-            if sum(all_green_cnt) == 0:
-                chi_test = [0, 0]
-            else:
-                chi_test = chisquare(np.array(all_green_cnt))
-            p_val_per_position.append(chi_test[1])
-            chi_per_position.append(chi_test[0])
-
         assert green_token_count == green_unique.sum()
         # HF-style output dictionary
         score_dict = dict()
         sampled_positions = "" if len(position_list) == 0 else "".join(list(map(str, position_list)))
         score_dict.update(dict(sampled_positions=sampled_positions))
 
-        # for k, v in position_cnt.items():
-        #     score_dict.update({f"pos_{k}": v})
         min_val = min(position_cnt.values())
         max_val = max(position_cnt.values())
         sum_val = sum(position_cnt.values())
         score_dict.update({'min_pos_ratio': min_val / sum_val})
         score_dict.update({'max_pos_ratio': max_val / sum_val})
+        score_dict.update(dict(custom_metric= -sum(p_val_per_position)))
 
-        if return_z_score_max:
-            z_score = self._compute_z_score(green_token_count, num_tokens_scored)
-            pos_weights = [position_cnt[i] / sum_val for i in range(1, max(position_cnt))]
-            weighted_z = sum([z * p for z, p in zip(z_score_per_position, pos_weights)])
-            weighted_entropy = sum([e * p for e, p in zip(entropy_per_position, pos_weights)])
-            weighted_chi = sum([c * p for c, p in zip(chi_per_position, pos_weights)])
-            mean_entropy = np.mean(entropy_per_position)
-            z_score_sum = max(z_score_per_position)
-            score_dict.update(dict(z_score_max=weighted_z))
-            score_dict.update(dict(entropy=-weighted_entropy))
-            score_dict.update(dict(chi_sq=weighted_chi))
-            score_dict.update(dict(chi_sq_p_val_min=-min(p_val_per_position)))
-            score_dict.update(dict(chi_sq_p_val_sum=-sum(p_val_per_position)))
         if return_bit_match:
             score_dict.update(dict(bit_acc=correct_bits / total_bits))
             score_dict.update(dict(bit_match=correct_bits == total_bits))
@@ -603,39 +576,72 @@ class WatermarkDetector(WatermarkBase):
         z = numer / denom
         return z
 
+    def _compute_binom_p_val(self, observed_count, T):
+        """
+        count refers to number of green tokens, T is total number of tokens
+        If T == -1, this means this position was not sampled. Return p-val=1 for this.
+        """
+        if T == -1:
+            return 1
+        binom_p = self.gamma
+        observed_count -= 1
+        # p value for observing a sample geq than the observed count
+        p_val = 1 - binom.cdf(max(observed_count, 0), T, binom_p)
+        return p_val
 
-    def _predict_message(self, position_cnt, green_cnt_by_position, num_candidates=20):
+    def _predict_message(self, position_cnt, green_cnt_by_position, p_val_per_pos,
+                         confidence_threshold=1e-9, num_candidates=100, random_list=False):
         msg_prediction = []
         confidence_per_pos = []
-        green_token_count_debug = 0
         for pos in range(1, self.converted_msg_length + 1):
             # find the index (digit) with the max counts of colorlist
+            p_val = p_val_per_pos[pos-1]
             if position_cnt.get(pos) is None: # no allocated tokens (may happen when T / b is small)
                 position_cnt[pos] = -1
-                pred = random.sample(list(range(self.base)), 1)[0]
+                preds = random.sample(list(range(self.base)), 2)
+                pred = preds[0]
+                next_idx = preds[1]
+                confidence_per_pos.append((-p_val, pred, next_idx, pos))
+
             else:
                 green_counts = green_cnt_by_position[pos]
-                pred, val = max(enumerate(green_counts), key=lambda x: x[1])
+                pred, val = max(enumerate(green_counts), key=lambda x: (x[1], x[0]))
                 sorted_idx = np.argsort(green_counts)
                 max_idx, next_idx = sorted_idx[-1], sorted_idx[-2]
-                conf = green_counts[max_idx] - green_counts[next_idx]
-                confidence_per_pos.append((conf, max_idx, next_idx, pos))
-                green_token_count_debug += val
+                confidence_per_pos.append((-p_val, max_idx, next_idx, pos))
             msg_prediction.append(pred)
 
         msg_prediction_list = [msg_prediction]
-        confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])
-        cnt = 0
-        # iterator of 1 edits, 2 edits, and so on
-        candidate_iter = iter(powerset(confidence_per_pos))
-        while cnt < num_candidates:
-            candidate = next(candidate_iter)
-            cand_msg = msg_prediction.copy()
-            for _, max_idx, next_idx, pos in candidate:
+        num_candidate_position = ceil(log2(num_candidates + 1))
+        confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])[:num_candidate_position]
+
+        # ablation for list decoding
+        if random_list:
+            cnt = 0
+            while cnt < num_candidates:
                 cand_msg = msg_prediction.copy()
-                cand_msg[pos - 1] = next_idx
-            msg_prediction_list.append(cand_msg)
-            cnt += 1
+                pos = random.sample(list(range(self.converted_msg_length)), 1)[0]
+                cand_correction = list(range(self.base))
+                cand_correction.remove(cand_msg[pos -1])
+                correction = random.sample(cand_correction, 1)[0]
+                cand_msg[pos - 1] = correction
+                msg_prediction_list.append(cand_msg)
+                cnt += 1
+
+        else:
+            # iterator of 1 edits, 2 edits, and so on
+            cnt = 0
+            candidate_iter = iter(powerset(confidence_per_pos))
+            while cnt < num_candidates:
+                try:
+                    candidate = next(candidate_iter)
+                except:
+                    break
+                cand_msg = msg_prediction.copy()
+                for _, max_idx, next_idx, pos in candidate:
+                    cand_msg[pos - 1] = next_idx
+                msg_prediction_list.append(cand_msg)
+                cnt += 1
 
         return msg_prediction_list
 
