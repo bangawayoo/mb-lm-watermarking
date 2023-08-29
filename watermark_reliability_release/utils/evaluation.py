@@ -109,12 +109,8 @@ MAUVE_TEXT_PAIR_COLUMN_NAMES = OUTPUT_TEXT_PAIR_COLUMN_NAMES
 
 
 ROC_TEST_STAT_SUFFIXES = [
-    "entropy",
-    "chi_sq",
-    "chi_sq_p_val_min",
-    "chi_sq_p_val_sum",
+    "custom_metric",
     "z_score",
-    "z_score_max",
     "win20-1_z_score",
     "win40-1_z_score",
     "winmax-1_z_score",
@@ -172,8 +168,6 @@ def load_detector(args):
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
     device = "cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu"
-    args.use_position_prf = False
-    args.code_length = 16
     wm_kwargs = {
         'use_position_prf': args.use_position_prf,
         'use_fixed_position': args.use_fixed_position,
