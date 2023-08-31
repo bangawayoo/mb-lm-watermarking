@@ -21,7 +21,7 @@ huggingface-cli login --token $HF_ACCESS_TOKEN
 #MODEL_PATH="/workspace/Public/llama-2-converted/llama-2-7b-chat/"
 #MODEL_PATH="facebook/opt-1.3b"
 #MIN_GEN=100 # number of valid samples to generate
-SAMPLING=T
+#SAMPLING=T
 #BS=64 # batch size for generation
 ##########################
 
@@ -72,12 +72,14 @@ do
         --input_filtering_strategy=prompt_and_completion_length \
         --output_filtering_strategy=max_new_tokens \
         --use_sampling $SAMPLING \
+        --num_beam $NUM_BEAMS \
         --seeding_scheme=$SEED_SCH \
         --gamma=$GAMMA \
         --delta=$DELTA \
         --base=$RADIX \
         --zero_bit=$ZERO_BIT \
         --use_position_prf=$USE_PPRF \
+        --use_fixed_position=$USE_FIXP \
         --run_name="$RUN_NAME"_gen \
         --wandb=$WANDB \
         --verbose=True \
@@ -112,6 +114,7 @@ do
         --evaluation_metrics=$EVAL_METRICS \
         --message_length="$MSG_LEN" \
         --base=$RADIX \
+        --ignore_repeated_ngrams=$IGNORE_R_NGRAM \
         --target_T="$TOKEN_LEN" \
         --debug=$DEBUG
   fi

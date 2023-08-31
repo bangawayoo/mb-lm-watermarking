@@ -9,7 +9,11 @@ def single_insertion(
     tokenized_no_wm_output,  # dst
     tokenized_w_wm_output,  # src
 ):
+
     top_insert_loc = min_token_count - attack_len
+    # quick fix for when attack_len > min_token_count.
+    if top_insert_loc <= 0:
+        return torch.tensor(tokenized_no_wm_output)
     rand_insert_locs = torch.randint(low=0, high=top_insert_loc, size=(2,))
 
     # tokenized_no_wm_output_cloned = torch.clone(tokenized_no_wm_output) # used to be tensor

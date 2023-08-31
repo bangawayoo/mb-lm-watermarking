@@ -469,10 +469,13 @@ def generate(
     if args.zero_bit:
         msg_binary = "0"
     else:
-        msg_decimal = random.getrandbits(msg_length)
-        msg_binary = format(msg_decimal, f"0{msg_length}b")
-    watermark_processor.set_message(msg_binary)
+        use_ecc = False
+        msg_binary, msg_encoded = sample_message(msg_length, use_ecc)
+
+    # watermark_processor.set_message(msg_binary)
+    watermark_processor.set_message(msg_encoded)
     print(f"Binary msg:\n{msg_binary}")
+    print(f"Binary encoded msg:\n{msg_encoded}")
     print(f"Converted msg:\n{watermark_processor.converted_message}")
     messages = [msg_binary] * len(examples['input_ids'])
 
@@ -485,6 +488,7 @@ def generate(
             torch.manual_seed(args.generation_seed)
         output_with_watermark = generate_with_watermark(input_ids=input_ids)
         sampled_positions = watermark_processor.flush_position()
+        watermark_processor.position_increment = 0
 
     if args.is_decoder_only_model:
         # need to isolate the newly generated tokens
@@ -527,3 +531,17 @@ def generate(
         ]
 
     return examples
+
+
+from reedmuller import reedmuller
+
+def sample_message(msg_length, use_ecc, ecc_params=None):
+    msg_decimal = random.getrandbits(msg_length)
+    msg_binary = format(msg_decimal, f"0{msg_length}b")
+    if use_ecc:
+        rm = reedmuller.ReedMuller(2, 5)
+        msg_encoded = ''.join(map(str, rm.encode(list(map(int, msg_binary)))))
+    else:
+        msg_encoded = msg_binary
+
+    return msg_binary, msg_encoded

@@ -109,12 +109,8 @@ MAUVE_TEXT_PAIR_COLUMN_NAMES = OUTPUT_TEXT_PAIR_COLUMN_NAMES
 
 
 ROC_TEST_STAT_SUFFIXES = [
-    "entropy",
-    "chi_sq",
-    "chi_sq_p_val_min",
-    "chi_sq_p_val_sum",
+    "custom_metric",
     "z_score",
-    "z_score_max",
     "win20-1_z_score",
     "win40-1_z_score",
     "winmax-1_z_score",
@@ -172,9 +168,10 @@ def load_detector(args):
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
     device = "cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu"
-    args.use_position_prf = False
     wm_kwargs = {
         'use_position_prf': args.use_position_prf,
+        'use_fixed_position': args.use_fixed_position,
+        'code_length': args.code_length
     }
     watermark_detector = WatermarkDetector(
         vocab=list(tokenizer.get_vocab().values()),
@@ -207,6 +204,7 @@ def compute_z_score(
     if args.normalizers != []:
         return_green_token_mask = None
 
+    watermark_detector.position_increment = 0
     input_text = example[text_column_name]
     error = False
     if input_text == "":
@@ -286,12 +284,15 @@ def compute_z_scores(example, watermark_detector=None, args=None):
             )
         if "w_wm_output_attacked" in example and col_name == "w_wm_output":
             gt_positions = example['w_wm_output_sampled_positions']
-        if col_name == "w_wm_output_attacked":
+        if "w_wm_output_attacked" in example and col_name == "w_wm_output_attacked":
             corrupted_positions = example['w_wm_output_attacked_sampled_positions']
 
     if "w_wm_output_attacked" in example:
         match_cnt = sum([x == y for x, y in zip(corrupted_positions, gt_positions)])
-        example['corrupted_position_match'] = match_cnt / len(gt_positions)
+        try:
+            example['corrupted_position_match'] = match_cnt / len(gt_positions)
+        except:
+            example['corrupted_position_match'] = float("nan")
 
     return example
 

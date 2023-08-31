@@ -152,7 +152,6 @@ def main(args):
 
     cmdline_args = args.__dict__.copy()
     prev_gen_table_meta = read_json(gen_table_meta_path)
-
     joined_args = prev_gen_table_meta.copy()
     for k, v in cmdline_args.items():
         if v is not None:
@@ -592,7 +591,8 @@ def main(args):
 
         # Save filtered mean values:
         for metric_name in series_column_names:
-            filtered_name = f"f_{target_T}p{upper_tolerance}m{lower_tolerance}_{metric_name}"
+            # filtered_name = f"f_{target_T}p{upper_tolerance}m{lower_tolerance}_{metric_name}"
+            filtered_name = f"filtered_{metric_name}"
             try:
                 run.summary[f"{filtered_name}_mean"] = filtered_table[metric_name].mean()
                 run.summary[f"{filtered_name}_std"] = filtered_table[metric_name].std()
@@ -1347,5 +1347,14 @@ if __name__ == "__main__":
 
     # split window settings
     args.window_settings = args.window_settings.split(",")
+
+    # check if added params are in the args namespace
+    args_dict = vars(args)
+    if not args_dict.get("use_position_prf"):
+        args.use_position_prf = False
+    if not args_dict.get("code_length"):
+        args.code_length = 16
+    if not args_dict.get("fixed_position"):
+        args.use_fixed_position = False
 
     main(args)
