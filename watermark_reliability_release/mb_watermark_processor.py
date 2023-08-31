@@ -457,7 +457,9 @@ class WatermarkDetector(WatermarkBase):
         for p in range(1, self.converted_msg_length + 1):
             all_green_cnt = np.array(green_cnt_by_position[p])
             green_cnt = max(all_green_cnt)
-            T = position_cnt.get(p, -1)
+            if position_cnt.get(p) is None:
+                position_cnt[p] = 0
+            T = position_cnt.get(p)
             binom_pval = self._compute_binom_p_val(green_cnt, T)
             p_val_per_position.append(binom_pval)
 
@@ -470,7 +472,6 @@ class WatermarkDetector(WatermarkBase):
         for msg in msg_prediction_list:
             cb, tb = self._compute_ber(msg, gold_message)
             prediction_results.append(cb)
-
 
         if False:
             if kwargs['col_name'] == "w_wm_output":
@@ -567,9 +568,9 @@ class WatermarkDetector(WatermarkBase):
     def _compute_z_score(self, observed_count, T):
         """
         count refers to number of green tokens, T is total number of tokens
-        If T == -1, this means this position was not sampled. Return 0 for this.
+        If T <= 0, this means this position was not sampled. Return 0 for this.
         """
-        if T == -1:
+        if T <= 0:
             return 0
         expected_count = self.gamma
         numer = observed_count - expected_count * T
@@ -580,9 +581,9 @@ class WatermarkDetector(WatermarkBase):
     def _compute_binom_p_val(self, observed_count, T):
         """
         count refers to number of green tokens, T is total number of tokens
-        If T == -1, this means this position was not sampled. Return p-val=1 for this.
+        If T <= 0, this means this position was not sampled. Return p-val=1 for this.
         """
-        if T == -1:
+        if T <= 0:
             return 1
         binom_p = self.gamma
         observed_count -= 1
@@ -725,7 +726,6 @@ class WatermarkDetector(WatermarkBase):
             frequencies_table[ngram] = frequencies_table.get(ngram, 0) + 1
             target = ngram[-1]
             prefix = ngram if self.self_salt else ngram[:-1]
-            # print(f"***prefix={prefix}, target={target}****")
             if self.use_fixed_position:
                 colorlist_flag, _ = self._get_ngram_score_cached(prefix, target)
             else:
@@ -902,8 +902,6 @@ class WatermarkDetector(WatermarkBase):
         return score_dict
 
     def _compute_ber(self, pred_msg: list, message: str):
-        from reedmuller import reedmuller
-
         pred_msg = "".join(map(str, pred_msg))
         decimal = int(pred_msg, self.base)
         binary_pred = format(decimal, f"0{self.message_length}b")

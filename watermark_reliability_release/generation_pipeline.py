@@ -156,9 +156,8 @@ def main(args):
     wm_kwargs = {
             'use_position_prf': args.use_position_prf,
             'use_fixed_position': args.use_fixed_position,
-            'code_length': 32
+            'code_length': args.message_length
                  }
-
     watermark_processor = WatermarkLogitsProcessor(
         vocab=list(tokenizer.get_vocab().values()),
         gamma=args.gamma,
@@ -554,7 +553,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--code_length",
         type=int,
-        default=32,
+        default=4,
         help="Length of the actual code to watermark when using error correcting algoritm",
     )
     parser.add_argument(
@@ -581,8 +580,6 @@ if __name__ == "__main__":
         default=False,
         help="When true, the position seed will be sampled with a fixed seed (rotation)"
     )
-
-
     parser.add_argument(
         "--verbose",
         type=str2bool,

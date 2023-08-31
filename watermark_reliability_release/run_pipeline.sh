@@ -85,7 +85,7 @@ do
         --verbose=True \
         --output_dir="$GENERATION_OUTPUT_DIR" \
         --overwrite T \
-        --message_length="$MSG_LEN" \
+        --message_length="$MSG_LEN" --code_length="$CODE_LEN" \
         --generation_batch_size="$BS" \
         --load_fp16 $FP16
   fi

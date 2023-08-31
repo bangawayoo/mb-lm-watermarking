@@ -186,6 +186,14 @@ def main(args):
     else:
         gen_table_ds = Dataset.from_list(gen_table[: args.limit_rows])
 
+    # check if added params are in the args namespace
+    args_dict = vars(args)
+    if not args_dict.get("use_position_prf"):
+        args.use_position_prf = False
+    if not args_dict.get("code_length"):
+        args.code_length = args.message_length
+    if not args_dict.get("use_fixed_position"):
+        args.use_fixed_position = False
     ###########################################################################
     # Extract the seeding scheme fine grained parameters
     ###########################################################################
@@ -1348,13 +1356,5 @@ if __name__ == "__main__":
     # split window settings
     args.window_settings = args.window_settings.split(",")
 
-    # check if added params are in the args namespace
-    args_dict = vars(args)
-    if not args_dict.get("use_position_prf"):
-        args.use_position_prf = False
-    if not args_dict.get("code_length"):
-        args.code_length = 16
-    if not args_dict.get("fixed_position"):
-        args.use_fixed_position = False
 
     main(args)
