@@ -21,7 +21,7 @@ huggingface-cli login --token $HF_ACCESS_TOKEN
 #MODEL_PATH="/workspace/Public/llama-2-converted/llama-2-7b-chat/"
 #MODEL_PATH="facebook/opt-1.3b"
 #MIN_GEN=100 # number of valid samples to generate
-SAMPLING=T
+#SAMPLING=T
 #BS=64 # batch size for generation
 ##########################
 

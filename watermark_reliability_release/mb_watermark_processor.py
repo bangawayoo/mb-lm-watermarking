@@ -378,8 +378,9 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update(dict(cand_match=float("nan")))
         score_dict.update(dict(cand_acc=float("nan")))
 
-        if return_z_score_max:
-            score_dict.update(dict(z_score_max=float("nan")))
+        # if return_z_score_max:
+        #     score_dict.update(dict(z_score_max=float("nan")))
+
         if return_bit_match:
             score_dict.update(dict(bit_acc=float("nan")))
         if return_num_tokens_scored:
@@ -442,7 +443,7 @@ class WatermarkDetector(WatermarkBase):
             # dummy positions
             position_list = [0,0,0,0]
         ##############################################
-        # count positions for all tokens (for now count repeated tokens as well)
+        # count positions for all tokens
         position_cnt = {}
         for k, v in ngram_to_position_lookup.items():
             freq = frequencies_table[k]
@@ -523,7 +524,7 @@ class WatermarkDetector(WatermarkBase):
         sum_val = sum(position_cnt.values())
         score_dict.update({'min_pos_ratio': min_val / sum_val})
         score_dict.update({'max_pos_ratio': max_val / sum_val})
-        score_dict.update(dict(custom_metric= -sum(p_val_per_position)))
+        score_dict.update(dict(custom_metric=-sum(p_val_per_position)))
 
         if return_bit_match:
             score_dict.update(dict(bit_acc=correct_bits / total_bits))
