@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 import collections
+import math
 from math import sqrt, ceil, floor, log2
 from itertools import chain, tee
 from functools import lru_cache
@@ -460,8 +461,9 @@ class WatermarkDetector(WatermarkBase):
             if position_cnt.get(p) is None:
                 position_cnt[p] = 0
             T = position_cnt.get(p)
-            binom_pval = self._compute_binom_p_val(green_cnt, T)
-            p_val_per_position.append(binom_pval)
+            # binom_pval = self._compute_binom_p_val(green_cnt, T)
+            multi_pval = self._compute_max_multinomial_p_val(green_cnt, T)
+            p_val_per_position.append(multi_pval)
 
         # predict message
         msg_prediction_list = self._predict_message(position_cnt, green_cnt_by_position, p_val_per_position)
@@ -560,7 +562,6 @@ class WatermarkDetector(WatermarkBase):
             z_score_at_effective_T = seq_z_score_enum / seq_z_score_denom
             z_score_at_T = z_score_at_effective_T[offsets]
             assert torch.isclose(z_score_at_T[-1], torch.tensor(z_score))
-
             score_dict.update(dict(z_score_at_T=z_score_at_T))
 
         return score_dict
@@ -590,6 +591,36 @@ class WatermarkDetector(WatermarkBase):
         # p value for observing a sample geq than the observed count
         p_val = 1 - binom.cdf(max(observed_count, 0), T, binom_p)
         return p_val
+
+    def _compute_max_multinomial_p_val(self, observed_count, T):
+        """
+        Compute the p-value by subtracting the cdf(observed_count -1) of multinomial~(T, 1/base, ... 1/base),
+        which is the probability of observing a sample as extreme or more as the observed_count
+        The computation follows from Levin, Bruce. "A representation for multinomial cumulative distribution functions."
+        The Annals of Statistics (1981): 1123-1126.
+        """
+        poiss = scipy.stats.poisson
+        k = self.base
+        s = T
+        a = observed_count - 1
+        binom_cdf = binom.cdf(a, T, 1 / k)
+        poiss_pmf = poiss.pmf(T, s)
+        max_multi_cdf = math.factorial(T) / s ** T / math.exp(-s) * (binom_cdf ** k) * poiss_pmf
+        p_val = 1 - min(1, max_multi_cdf)
+        return p_val
+
+    def _compute_hoeffdings_bound(self, observed_count, T):
+        """
+        Compute bound using Hoeffding's inequality.
+        Similar to using the normal approximation to the binomial
+        """
+        if T <= 0:
+            return 1
+        mean = T / self.base
+        delta = max(0, observed_count - mean)
+        bound = math.exp(-2 * delta ** 2 / T)
+        return bound
+
 
     def _predict_message(self, position_cnt, green_cnt_by_position, p_val_per_pos,
                          confidence_threshold=1e-9, num_candidates=100, random_list=False):
