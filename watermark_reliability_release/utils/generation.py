@@ -468,6 +468,7 @@ def generate(
     msg_length = args.message_length
     if args.zero_bit:
         msg_binary = "0"
+        msg_encoded = "0"
     else:
         use_ecc = False
         msg_binary, msg_encoded = sample_message(msg_length, use_ecc)

@@ -62,7 +62,7 @@ do
   then
     python generation_pipeline.py \
         --model_name=$MODEL_PATH \
-        --dataset_name=c4 \
+        --dataset_name=$D_NAME \
         --dataset_config_name=realnewslike \
         --max_new_tokens=$TOKEN_LEN \
         --min_prompt_tokens=50 \
