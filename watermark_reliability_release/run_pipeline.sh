@@ -111,6 +111,7 @@ do
         --input_dir="$GENERATION_OUTPUT_DIR" \
         --output_dir="$GENERATION_OUTPUT_DIR"_eval \
         --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
+        --oracle_model_name_or_path $ORACLE_MODEL \
         --evaluation_metrics=$EVAL_METRICS \
         --message_length="$MSG_LEN" \
         --base=$RADIX \
