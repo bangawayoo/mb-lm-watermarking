@@ -476,7 +476,7 @@ UNPOOL_FN_TABLE = {
 
 
 def get_unpool_fn(model_name):
-    if "opt" in model_name:
+    if "opt" in model_name or "llama" in model_name:
         return UNPOOL_FN_TABLE["opt"]
     else:
         raise NotImplementedError(f"unpooling function not implemented for {model_name}")
@@ -523,7 +523,6 @@ def compute_ppl_batch(
 
     with torch.no_grad():
         pooled_outputs = oracle_model(input_ids=inputs, labels=labels)
-
         outputs = get_unpool_fn(oracle_model_name)(pooled_outputs.logits, labels, oracle_model)
         loss = (
             outputs.loss
