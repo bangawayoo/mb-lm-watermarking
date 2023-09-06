@@ -206,7 +206,7 @@ def compute_z_score(
 
     watermark_detector.position_increment = 0
     input_text = example[text_column_name]
-    if example.get("sampled_positions", None):
+    if example.get("sampled_positions", None) is None:
         # entering dummy values
         example['sampled_positions'] = "0000"
     error = False

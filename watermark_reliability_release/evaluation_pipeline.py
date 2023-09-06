@@ -181,6 +181,8 @@ def main(args):
 
     args = argparse.Namespace(**joined_args)
     gen_table = [ex for ex in read_jsonlines(gen_table_path)]
+    if args.debug:
+        gen_table = gen_table[:100]
     if args.limit_rows == -1:
         gen_table_ds = Dataset.from_list(gen_table)
     else:
