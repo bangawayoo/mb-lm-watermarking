@@ -74,7 +74,7 @@ def evaluate_p_sp(input1, input2, use_sent_transformers=False):
     # Check if the required files exist
     if not os.path.exists(args['load_file']) or not os.path.exists(args['sp_model']):
         ALT_PATH = "/workspace/cache"
-        if os.path.exists(os.path.join(ALT_PATH, args['load_file'])):
+        if os.path.exists(os.path.join(ALT_PATH, os.path.basename(args['load_file']))):
             args['load_file'] = os.path.join(ALT_PATH, os.path.basename(args['load_file']))
             args['sp_model'] = os.path.join(ALT_PATH, os.path.basename(args['sp_model']))
         else:
