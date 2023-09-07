@@ -73,22 +73,27 @@ def evaluate_p_sp(input1, input2, use_sent_transformers=False):
 
     # Check if the required files exist
     if not os.path.exists(args['load_file']) or not os.path.exists(args['sp_model']):
-        # make a box around the print statement
-        print("====================================="*2)
-        print("Pretrained model weights wasn't found, Downloading paraphrase-at-scale-english.zip...")
-        print("====================================="*2)
-        # Download the zip file
-        subprocess.run(['wget', download_url])
+        ALT_PATH = "/workspace/cache"
+        if os.path.exists(os.path.join(ALT_PATH, args['load_file'])):
+            args['load_file'] = os.path.join(ALT_PATH, os.path.basename(args['load_file']))
+            args['sp_model'] = os.path.join(ALT_PATH, os.path.basename(args['sp_model']))
+        else:
+            # make a box around the print statement
+            print("====================================="*2)
+            print("Pretrained model weights wasn't found, Downloading paraphrase-at-scale-english.zip...")
+            print("====================================="*2)
+            # Download the zip file
+            subprocess.run(['wget', download_url])
 
-        # Unzip the file
-        subprocess.run(['unzip', 'paraphrase-at-scale-english.zip', '-d', download_dir])
+            # Unzip the file
+            subprocess.run(['unzip', 'paraphrase-at-scale-english.zip', '-d', download_dir])
 
-        # Delete the zip file
-        os.remove('paraphrase-at-scale-english.zip')
+            # Delete the zip file
+            os.remove('paraphrase-at-scale-english.zip')
 
-        # Update the file paths
-        args['load_file'] = os.path.join(download_dir, 'paraphrase-at-scale-english/model.para.lc.100.pt')
-        args['sp_model'] = os.path.join(download_dir, 'paraphrase-at-scale-english/paranmt.model')
+            # Update the file paths
+            args['load_file'] = os.path.join(download_dir, 'paraphrase-at-scale-english/model.para.lc.100.pt')
+            args['sp_model'] = os.path.join(download_dir, 'paraphrase-at-scale-english/paranmt.model')
 
     model, _ = load_model(None, args)
     model.eval()
