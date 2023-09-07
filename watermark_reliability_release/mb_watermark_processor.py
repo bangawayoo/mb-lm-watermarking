@@ -17,9 +17,10 @@
 from __future__ import annotations
 import collections
 import math
-from math import sqrt, ceil, floor, log2
+from math import sqrt, ceil, floor, log2, log
 from itertools import chain, tee
 from functools import lru_cache
+import time
 import random
 
 import scipy.stats
@@ -46,11 +47,13 @@ class WatermarkBase:
         code_length: int = 4,
         use_position_prf: bool = True,
         use_fixed_position: bool = False,
+        device: str = "cuda",
+        **kwargs
     ):
         # patch now that None could now maybe be passed as seeding_scheme
         if seeding_scheme is None:
             seeding_scheme = "simple_1"
-
+        self.device = device
         # Vocabulary setup
         self.vocab = vocab
         self.vocab_size = len(vocab)
@@ -85,6 +88,8 @@ class WatermarkBase:
         self.use_fixed_position = use_fixed_position
         self.bit_position_list = []
         self.position_increment = 0
+        self.green_cnt_by_position = {i: [0 for _ in range(self.base)] for i
+                                      in range(1, self.converted_msg_length + 1)}
 
     def _initialize_seeding_scheme(self, seeding_scheme: str) -> None:
         """Initialize all internal settings of the seeding strategy from a colloquial, "public" name for the scheme."""
@@ -142,6 +147,25 @@ class WatermarkBase:
         colorlist = torch.chunk(vocab_permutation, floor(1 / self.gamma))
         return colorlist
 
+    # @lru_cache(maxsize=2**32)
+    def _get_ngram_score_cached(self, prefix: tuple[int], target: int, cand_msg=None):
+        """Expensive re-seeding and sampling is cached."""
+        ######################
+        # self.converted_message = str(cand_msg) * self.converted_msg_length
+        # Handle with care, should ideally reset on __getattribute__ access to self.prf_type, self.context_width, self.self_salt, self.hash_key
+        # greenlist_ids = self._get_greenlist_ids(torch.as_tensor(prefix, device=self.device))
+        # return True if target in greenlist_ids else False, self.get_current_position()
+        ######################
+        colorlist_ids = self._get_colorlist_ids(torch.as_tensor(prefix, device=self.device))
+        colorlist_flag = []
+        for cl in colorlist_ids[:self.base]:
+            if target in cl:
+                colorlist_flag.append(True)
+            else:
+                colorlist_flag.append(False)
+
+        return colorlist_flag, self.get_current_position()
+
     def get_current_bit(self, bit_position):
         # embedding stage
         if self.converted_message:
@@ -177,6 +201,8 @@ class WatermarkBase:
     def flush_position(self):
         positions = "".join(list(map(str, self.bit_position_list)))
         self.bit_position_list = []
+        self.green_cnt_by_position = {i: [0 for _ in range(self.base)] for i
+                                      in range(1, self.converted_msg_length + 1)}
         return [positions]
 
 
@@ -189,6 +215,8 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
         super().__init__(*args, **kwargs)
         self.store_spike_ents = store_spike_ents
         self.spike_entropies = None
+        self.feedback = kwargs.get('use_feedback', False)
+        self.feedback_args = kwargs.get('feedback_args', {})
         if self.store_spike_ents:
             self._init_spike_entropies()
 
@@ -280,10 +308,9 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
         # this is lazy to allow us to co-locate on the watermarked model's device
         self.rng = torch.Generator(device=input_ids.device) if self.rng is None else self.rng
 
-        # NOTE, it would be nice to get rid of this batch loop, but currently,
-        # the seed and partition operations are not tensor/vectorized, thus
-        # each sequence in the batch needs to be treated separately.
+        #TODO: batchify ecc with feedback
         list_of_greenlist_ids = [None for _ in input_ids]  # Greenlists could differ in length
+        feedback_flag = False
         for b_idx, input_seq in enumerate(input_ids):
             if self.self_salt:
                 greenlist_ids = self._score_rejection_sampling(input_seq, scores[b_idx])
@@ -300,11 +327,53 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
                     self.spike_entropies = [[] for _ in range(input_ids.shape[0])]
                 self.spike_entropies[b_idx].append(self._compute_spike_entropy(scores[b_idx]))
 
+            # logic for whether to expand the greenlist and suppress blacklist
+            if self.feedback:
+                # increment the colorlist for the current token
+                context_length = self.context_width + 1 - self.self_salt
+                if input_seq.shape[-1] < context_length:
+                    continue
+                ngram = input_seq[-context_length:]
+                ngram = tuple(ngram.tolist())
+                target = ngram[-1]
+                prefix = ngram if self.self_salt else ngram[:-1]
+                colorlist_ids = self._get_colorlist_ids(torch.as_tensor(prefix, device=self.device))
+                pos = self.get_current_position()
+                for c_idx, cl in enumerate(colorlist_ids[:self.base]):
+                    if target in cl:
+                        self.green_cnt_by_position[pos][c_idx] += 1
+                colorlist_flag, pos = self._get_ngram_score_cached(prefix, target)
+
+                eta = self.feedback_args.get("eta", 3)
+                tau = self.feedback_args.get("tau", 2)
+                feedback_bias = self.feedback_args.get("feedback_bias", 5)
+                msg = int(self.converted_message[pos-1])
+                preliminary_cond = sum(self.green_cnt_by_position[pos]) >= eta
+                if preliminary_cond:
+                    max_color = np.argmax(self.green_cnt_by_position[pos])
+                    cond_1 = max_color != msg
+                    if cond_1:
+                        # print("*Not max color*")
+                        feedback_flag = True
+                        continue
+                    top2_color = np.argpartition(self.green_cnt_by_position[pos], -2)[-2]
+                    color_cnt_diff = self.green_cnt_by_position[pos][max_color] - \
+                                     self.green_cnt_by_position[pos][top2_color]
+                    cond_2 = color_cnt_diff < tau + 1
+                    # if cond_2:
+                    #     print("*suppress blacklist*")
+                    #     colorlist_ids = list(colorlist_ids)
+                    #     del colorlist_ids[top2_color]
+                    #     greenlist_ids = torch.concat(colorlist_ids, dim=0)
+                    #     list_of_greenlist_ids[b_idx] = greenlist_ids
+
+
         green_tokens_mask = self._calc_greenlist_mask(
             scores=scores, greenlist_token_ids=list_of_greenlist_ids
         )
         scores = self._bias_greenlist_logits(
-            scores=scores, greenlist_mask=green_tokens_mask, greenlist_bias=self.delta
+            scores=scores, greenlist_mask=green_tokens_mask,
+            greenlist_bias=self.delta if not feedback_flag else feedback_bias
         )
         ## hardlisting for debugging ###
         # scores[~green_tokens_mask] = 0
@@ -378,6 +447,9 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update(dict(bit_match=float("nan")))
         score_dict.update(dict(cand_match=float("nan")))
         score_dict.update(dict(cand_acc=float("nan")))
+        score_dict.update(dict(cand_acc_ablation=float("nan")))
+        score_dict.update(dict(cand_match_ablation=float("nan")))
+        score_dict.update(dict(decoding_time=float("nan")))
 
         # if return_z_score_max:
         #     score_dict.update(dict(z_score_max=float("nan")))
@@ -433,6 +505,7 @@ class WatermarkDetector(WatermarkBase):
         message: str = "",
         **kwargs,
     ):
+        s_time = time.time()
         gold_message = message
         ########## sequential extraction #########
         if True:
@@ -466,24 +539,37 @@ class WatermarkDetector(WatermarkBase):
             p_val_per_position.append(multi_pval)
 
         # predict message
-        msg_prediction_list = self._predict_message(position_cnt, green_cnt_by_position, p_val_per_position)
+        list_decoded_msg, ran_list_decoded_msg, elapsed_time = \
+            self._predict_message(position_cnt, green_cnt_by_position, p_val_per_position)
+        elapsed_time = elapsed_time - s_time
         # compute bit accuracy
-        best_prediction = msg_prediction_list[0]
-        correct_bits, total_bits = self._compute_ber(best_prediction, gold_message)
-        prediction_results = []
-        for msg in msg_prediction_list:
-            cb, tb = self._compute_ber(msg, gold_message)
-            prediction_results.append(cb)
+        best_prediction = list_decoded_msg[0]
+        correct_bits, total_bits, error_pos = self._compute_ber(best_prediction, gold_message)
+        prediction_results = {'confidence': [], 'random': []}
+        # for our list decoded msg
+        for msg in list_decoded_msg:
+            cb, tb, _ = self._compute_ber(msg, gold_message)
+            prediction_results['confidence'].append(cb)
+        # for random list decoded msg
+        for msg in ran_list_decoded_msg:
+            cb, tb, _ = self._compute_ber(msg, gold_message)
+            prediction_results['random'].append(cb)
 
         if False:
             if kwargs['col_name'] == "w_wm_output":
-                if matched_bits != total_bits:
-                    print(kwargs['text'])
-                    print(matched_bits / total_bits)
-                    print(min(position_cnt.values()))
-                    print(sum(position_cnt.values()))
-                    print(position_cnt)
-                    breakpoint()
+                print(gold_message)
+                # if matched_bits != total_bits:
+                #     print(kwargs['text'])
+                print(correct_bits / total_bits)
+                # for err in error_pos:
+                #     print(green_cnt_by_position[err // 2 + 1])
+                #     print(gold_message[err])
+                # print(min(position_cnt.values()))
+                # print(sum(position_cnt.values()))
+                print(position_cnt)
+                print(sum(position_cnt.values()))
+                print(green_cnt_by_position)
+                breakpoint()
 
         # use the predicted message to select ngram_to_watermark_lookup
         for ngram, green_token in ngram_to_watermark_lookup.items():
@@ -528,12 +614,14 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update({'min_pos_ratio': min_val / sum_val})
         score_dict.update({'max_pos_ratio': max_val / sum_val})
         score_dict.update(dict(custom_metric=-sum(p_val_per_position)))
-
+        score_dict.update(dict(decoding_time=elapsed_time))
         if return_bit_match:
             score_dict.update(dict(bit_acc=correct_bits / total_bits))
             score_dict.update(dict(bit_match=correct_bits == total_bits))
-            score_dict.update(dict(cand_match=max(prediction_results) == total_bits))
-            score_dict.update(dict(cand_acc=max(prediction_results) / total_bits))
+            score_dict.update(dict(cand_match=max(prediction_results['confidence']) == total_bits))
+            score_dict.update(dict(cand_match_ablation=max(prediction_results['random']) == total_bits))
+            score_dict.update(dict(cand_acc=max(prediction_results['confidence']) / total_bits))
+            score_dict.update(dict(cand_acc_ablation=max(prediction_results['random']) / total_bits))
         if return_num_tokens_scored:
             score_dict.update(dict(num_tokens_scored=num_tokens_scored))
         if return_num_green_tokens:
@@ -623,7 +711,8 @@ class WatermarkDetector(WatermarkBase):
 
 
     def _predict_message(self, position_cnt, green_cnt_by_position, p_val_per_pos,
-                         confidence_threshold=1e-9, num_candidates=100, random_list=False):
+                         num_candidates=50):
+        s_time = 0
         msg_prediction = []
         confidence_per_pos = []
         for pos in range(1, self.converted_msg_length + 1):
@@ -644,39 +733,37 @@ class WatermarkDetector(WatermarkBase):
                 confidence_per_pos.append((-p_val, max_idx, next_idx, pos))
             msg_prediction.append(pred)
 
+        elapsed_time = time.time() - s_time
+        random_prediction_list = [msg_prediction]
+        # sampled random bits
+        cnt = 0
+        while cnt < num_candidates:
+            msg_decimal = random.getrandbits(self.message_length)
+            converted_msg = self._numberToBase(msg_decimal, self.base)
+            converted_msg = "0" * (self.converted_msg_length - len(converted_msg)) + converted_msg
+            random_prediction_list.append(converted_msg)
+            cnt += 1
+
+
         msg_prediction_list = [msg_prediction]
         num_candidate_position = ceil(log2(num_candidates + 1))
         confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])[:num_candidate_position]
-
-        # ablation for list decoding
-        if random_list:
-            cnt = 0
-            while cnt < num_candidates:
-                cand_msg = msg_prediction.copy()
-                pos = random.sample(list(range(self.converted_msg_length)), 1)[0]
-                cand_correction = list(range(self.base))
-                cand_correction.remove(cand_msg[pos -1])
-                correction = random.sample(cand_correction, 1)[0]
-                cand_msg[pos - 1] = correction
-                msg_prediction_list.append(cand_msg)
-                cnt += 1
-
-        else:
-            # iterator of 1 edits, 2 edits, and so on
-            cnt = 0
-            candidate_iter = iter(powerset(confidence_per_pos))
-            while cnt < num_candidates:
-                try:
-                    candidate = next(candidate_iter)
-                except:
-                    break
-                cand_msg = msg_prediction.copy()
-                for _, max_idx, next_idx, pos in candidate:
-                    cand_msg[pos - 1] = next_idx
-                msg_prediction_list.append(cand_msg)
-                cnt += 1
-
-        return msg_prediction_list
+        cnt = 0
+        candidate_iter = iter(powerset(confidence_per_pos))
+        while cnt < num_candidates:
+            try:
+                candidate = next(candidate_iter)
+            except:
+                break
+            cand_msg = msg_prediction.copy()
+            for _, max_idx, next_idx, pos in candidate:
+                cand_msg[pos - 1] = next_idx
+            msg_prediction_list.append(cand_msg)
+            cnt += 1
+        # print(msg_prediction)
+        # print(len(msg_prediction_list))
+        # breakpoint()
+        return msg_prediction_list, random_prediction_list, elapsed_time
 
     def _compute_p_value(self, z):
         p_value = scipy.stats.norm.sf(z)
@@ -956,11 +1043,14 @@ class WatermarkDetector(WatermarkBase):
 
         match = 0
         total = 0
-        for g, p in zip(message, binary_pred):
+        error_pos = []
+        for pos, (g, p) in enumerate(zip(message, binary_pred)):
             if g == p:
                 match += 1
+            else:
+                error_pos.append(pos)
             total += 1
-        return match, total
+        return match, total, error_pos
 
     def detect(
         self,

@@ -15,6 +15,7 @@
 # limitations under the License.
 import os
 import random
+import time
 import torch
 
 # HF classes
@@ -483,11 +484,16 @@ def generate(
     with torch.no_grad():
         if args.generation_seed is not None:
             torch.manual_seed(args.generation_seed)
+        s_time = time.time()
         output_without_watermark = generate_without_watermark(input_ids=input_ids)
+        non_wm_time = time.time() - s_time
 
         if args.generation_seed is not None:
             torch.manual_seed(args.generation_seed)
+        s_time = time.time()
         output_with_watermark = generate_with_watermark(input_ids=input_ids)
+        wm_time = time.time() - s_time
+
         sampled_positions = watermark_processor.flush_position()
         watermark_processor.position_increment = 0
 
@@ -502,14 +508,6 @@ def generate(
     decoded_output_with_watermark = tokenizer.batch_decode(
         output_with_watermark, skip_special_tokens=True
     )
-    #
-    # # make sure empty strings do not exist. This will make the input id columns dtype to be converted float
-    # # due to the Dataset formatting
-    # for idx in range(len(decoded_output_with_watermark)):
-    #     if len(decoded_output_without_watermark[idx]):
-    #         decoded_output_without_watermark[idx] = " "
-    #     if len(decoded_output_with_watermark[idx]):
-    #         decoded_output_with_watermark[idx] = " "
     examples.update(
         {
             "no_wm_output": decoded_output_without_watermark,
@@ -522,6 +520,8 @@ def generate(
             "w_wm_output_length": (output_with_watermark != tokenizer.pad_token_id)
             .sum(dim=-1)
             .tolist(),
+            'wm_encoding_time': [wm_time],
+            'non_wm_encoding_time': [non_wm_time]
         }
     )
     if watermark_processor.spike_entropies is not None:

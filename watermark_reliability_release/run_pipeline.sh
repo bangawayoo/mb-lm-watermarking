@@ -80,6 +80,8 @@ do
         --zero_bit=$ZERO_BIT \
         --use_position_prf=$USE_PPRF \
         --use_fixed_position=$USE_FIXP \
+        --use_feedback=$FEEDBACK --feedback_bias=$F_BIAS \
+        --feedback_eta=$F_ETA --feedback_tau=$F_TAU \
         --run_name="$RUN_NAME"_gen \
         --wandb=$WANDB \
         --verbose=True \

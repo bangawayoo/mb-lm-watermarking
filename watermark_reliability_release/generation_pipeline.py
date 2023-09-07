@@ -19,6 +19,7 @@ import argparse
 from functools import partial
 import random
 from tqdm import tqdm
+import torch
 import wandb
 
 print(f"Current huggingface cache dir: {os.environ['HF_HOME']}")
@@ -156,7 +157,12 @@ def main(args):
     wm_kwargs = {
             'use_position_prf': args.use_position_prf,
             'use_fixed_position': args.use_fixed_position,
-            'code_length': args.message_length
+            'code_length': args.message_length,
+            'use_feedback': args.use_feedback,
+            'feedback_args': {'eta': args.feedback_eta,
+                              'tau': args.feedback_tau,
+                              'feedback_bias': args.feedback_bias
+                              }
                  }
     watermark_processor = WatermarkLogitsProcessor(
         vocab=list(tokenizer.get_vocab().values()),
@@ -167,6 +173,7 @@ def main(args):
         store_spike_ents=args.store_spike_ents,
         select_green_tokens=True,
         message_length=args.message_length,
+        device="cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu",
         **wm_kwargs
     )
 
@@ -580,6 +587,31 @@ if __name__ == "__main__":
         default=False,
         help="When true, the position seed will be sampled with a fixed seed (rotation)"
     )
+    parser.add_argument(
+        "--use_feedback",
+        type=str2bool,
+        default=False,
+        help="When true, encoding will do error correcting using feedbacks"
+    )
+    parser.add_argument(
+        "--feedback_bias",
+        type=float,
+        default=2,
+        help="magnitude of bias when using feedback"
+    )
+    parser.add_argument(
+        "--feedback_eta",
+        type=int,
+        default=2,
+        help="number of tokens per position to observe after staring to correct"
+    )
+    parser.add_argument(
+        "--feedback_tau",
+        type=int,
+        default=2,
+        help="Parameter of condition 1"
+    )
+    # logging
     parser.add_argument(
         "--verbose",
         type=str2bool,
