@@ -188,7 +188,8 @@ def main(args):
     else:
         gen_table_ds = Dataset.from_list(gen_table[: args.limit_rows])
 
-    # check if added params are in the args namespace
+    # check if newly added params are in the args namespace
+    # when running old generations
     args_dict = vars(args)
     if not args_dict.get("use_position_prf"):
         args.use_position_prf = False

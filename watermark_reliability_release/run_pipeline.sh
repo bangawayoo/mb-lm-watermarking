@@ -122,3 +122,17 @@ do
         --debug=$DEBUG
   fi
 done
+
+python compute_ppl.py \
+    --evaluation_metrics=ppl \
+    --run_name="$RUN_NAME" \
+    --wandb=$WANDB \
+    --input_dir="$OUTPUT_DIR" \
+    --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
+    --oracle_model_name_or_path $ORACLE_MODEL \
+    --evaluation_metrics=$EVAL_METRICS \
+    --message_length="$MSG_LEN" \
+    --base=$RADIX \
+    --ignore_repeated_ngrams=$IGNORE_R_NGRAM \
+    --target_T="$TOKEN_LEN" \
+    --debug=$DEBUG
