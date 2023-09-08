@@ -359,6 +359,8 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
                     top2_color = np.argpartition(self.green_cnt_by_position[pos], -2)[-2]
                     color_cnt_diff = self.green_cnt_by_position[pos][max_color] - \
                                      self.green_cnt_by_position[pos][top2_color]
+                    if tau == -1:
+                        continue
                     cond_2 = color_cnt_diff < tau + 1
                     if cond_2:
                         colorlist_ids = list(colorlist_ids)
