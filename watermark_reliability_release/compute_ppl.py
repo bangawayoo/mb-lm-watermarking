@@ -140,7 +140,6 @@ def main(args):
             if v is not None:
                 joined_args.update({k: v})
             else:
-                breakpoint()
                 print(
                     f"cmdline arg {k} is None, leaving it as the value found in the input metadata: {prev_gen_table_meta[k]}"
                 )
