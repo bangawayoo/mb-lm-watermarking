@@ -89,7 +89,7 @@ do
         --overwrite T \
         --message_length="$MSG_LEN" --code_length="$CODE_LEN" \
         --generation_batch_size="$BS" \
-        --load_fp16 $FP16
+        --load_fp16 $FP16 --limit_rows=$LIMIT_ROWS
   fi
 
   if [ $RUN_ATT == T ]
