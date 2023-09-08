@@ -7,7 +7,7 @@ wandb offline
 export CUDA_VISIBLE_DEVICES="0";
 
 export HF_HOME="/cache"
-RUN_NAME="16b-30T-4R"
+RUN_NAME="8b-125T-4R-0.25GAMMA-lefthash,16b-250T-4R-0.25GAMMA-lefthash"
 OUTPUT_DIR="experiments/"
 
 ### logging related ###

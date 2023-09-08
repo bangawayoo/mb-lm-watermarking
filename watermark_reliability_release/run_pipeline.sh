@@ -89,7 +89,7 @@ do
         --overwrite T \
         --message_length="$MSG_LEN" --code_length="$CODE_LEN" \
         --generation_batch_size="$BS" \
-        --load_fp16 $FP16
+        --load_fp16 $FP16 --limit_rows=$LIMIT_ROWS
   fi
 
   if [ $RUN_ATT == T ]
@@ -101,7 +101,8 @@ do
         --cp_attack_insertion_len "${srcp}" \
         --cp_attack_type=$CP_ATT_TYPE \
         --input_dir="$GENERATION_OUTPUT_DIR" \
-        --verbose=True --overwrite_output_file T
+        --verbose=True --overwrite_output_file T \
+        --limit_rows=$LIMIT_ROWS
   fi
 
   if [ $RUN_EVAL == T ]
@@ -119,20 +120,6 @@ do
         --base=$RADIX \
         --ignore_repeated_ngrams=$IGNORE_R_NGRAM \
         --target_T="$TOKEN_LEN" \
-        --debug=$DEBUG
+        --debug=$DEBUG --limit_rows=$LIMIT_ROWS
   fi
 done
-
-python compute_ppl.py \
-    --evaluation_metrics=ppl \
-    --run_name="$RUN_NAME" \
-    --wandb=$WANDB \
-    --input_dir="$OUTPUT_DIR" \
-    --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
-    --oracle_model_name_or_path $ORACLE_MODEL \
-    --evaluation_metrics=$EVAL_METRICS \
-    --message_length="$MSG_LEN" \
-    --base=$RADIX \
-    --ignore_repeated_ngrams=$IGNORE_R_NGRAM \
-    --target_T="$TOKEN_LEN" \
-    --debug=$DEBUG
