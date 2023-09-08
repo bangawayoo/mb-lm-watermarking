@@ -360,12 +360,11 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
                     color_cnt_diff = self.green_cnt_by_position[pos][max_color] - \
                                      self.green_cnt_by_position[pos][top2_color]
                     cond_2 = color_cnt_diff < tau + 1
-                    # if cond_2:
-                    #     print("*suppress blacklist*")
-                    #     colorlist_ids = list(colorlist_ids)
-                    #     del colorlist_ids[top2_color]
-                    #     greenlist_ids = torch.concat(colorlist_ids, dim=0)
-                    #     list_of_greenlist_ids[b_idx] = greenlist_ids
+                    if cond_2:
+                        colorlist_ids = list(colorlist_ids)
+                        del colorlist_ids[top2_color]
+                        greenlist_ids = torch.concat(colorlist_ids, dim=0)
+                        list_of_greenlist_ids[b_idx] = greenlist_ids
 
 
         green_tokens_mask = self._calc_greenlist_mask(
