@@ -358,17 +358,15 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
                         # feedback_flag = True
                         list_of_blacklist_ids[b_idx] = colorlist_ids[max_color]
                         continue
-                    # top2_color = np.argpartition(self.green_cnt_by_position[pos], -2)[-2]
-                    # color_cnt_diff = self.green_cnt_by_position[pos][max_color] - \
-                    #                  self.green_cnt_by_position[pos][top2_color]
-                    # if tau == -1:
-                    #     continue
-                    # cond_2 = color_cnt_diff < tau + 1
-                    # if cond_2:
-                    #     colorlist_ids = list(colorlist_ids)
-                    #     del colorlist_ids[top2_color]
-                    #     greenlist_ids = torch.concat(colorlist_ids, dim=0)
-                    #     list_of_greenlist_ids[b_idx] = greenlist_ids
+                    if tau == -1:
+                        continue
+                    top2_color = np.argpartition(self.green_cnt_by_position[pos], -2)[-2]
+                    color_cnt_diff = self.green_cnt_by_position[pos][max_color] - \
+                                     self.green_cnt_by_position[pos][top2_color]
+
+                    cond_2 = color_cnt_diff < tau + 1
+                    if cond_2:
+                        list_of_blacklist_ids[b_idx] = colorlist_ids[top2_color]
 
 
         green_tokens_mask = self._calc_greenlist_mask(
