@@ -3,12 +3,14 @@ export HF_ACCESS_TOKEN="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"
 huggingface-cli login --token $HF_ACCESS_TOKEN
 
 export WANDB_API_KEY="2570d8af822487be5bd6478ecc3c153ac9beede5";
-wandb offline
+wandb online
 export CUDA_VISIBLE_DEVICES="0";
 
-export HF_HOME="/cache"
-RUN_NAME="8b-125T-4R-0.25GAMMA-lefthash,16b-250T-4R-0.25GAMMA-lefthash"
-OUTPUT_DIR="experiments/"
+export HF_HOME="/workspace/cache"
+export RUN_NAME="feedback=2.5-tau=-1-eta=3-delta=1-lefthash,feedback=2-tau=-1-eta=3-delta=1-lefthash,feedback=1.5-tau=-1-eta=3-delta=1-lefthash,
+feedback=3.5-tau=-1-eta=3-delta=1-lefthash,feedback=3-tau=-1-eta=3-delta=1-lefthash"
+
+export OUTPUT_DIR="/experiments/delta"
 
 ### logging related ###
 #OUTPUT_DIR="./test"
@@ -17,12 +19,10 @@ DEBUG=F
 ##########################
 
 ### evaluation related ###
-export MSG_LEN=24; export CODE_LEN=24; export RADIX=4; export ZERO_BIT=F;
-export TOKEN_LEN=250
+export TOKEN_LEN=100
 export ORACLE_MODEL="meta-llama/Llama-2-13b-hf"
-export ORACLE_MODEL="facebook/opt-1.3b"
 export IGNORE_R_NGRAM=F
-export BATCH_SIZE=4
+export BATCH_SIZE=1
 ##########################
 
 GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
@@ -36,8 +36,5 @@ python compute_ppl.py \
     --roc_test_stat=all --overwrite_output_file T --overwrite_args T \
     --oracle_model_name_or_path $ORACLE_MODEL \
     --ppl_batch_size=${BATCH_SIZE} \
-    --message_length="$MSG_LEN" \
-    --base=$RADIX \
-    --ignore_repeated_ngrams=$IGNORE_R_NGRAM \
     --target_T="$TOKEN_LEN" \
     --debug=$DEBUG
