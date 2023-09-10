@@ -65,6 +65,11 @@ disable_caching()
 
 
 def main(args):
+    assert args.oracle_model_name_or_path, "PPL metric requires oracle model."
+
+    # Load the oracle model for PPL measurement
+    oracle_model, oracle_tokenizer, _ = load_oracle_model(args)
+
     for run_name, input_dir, output_dir in zip(args.run_name, args.input_dir, args.output_dir):
         ###########################################################################
         # Create output dir if it doesn't exist, and warn if it contains metric file
@@ -284,11 +289,6 @@ def main(args):
         # Perplexity (PPL) evaluation
         # NOTE: basically requires a model on gpu, or is extremely slow
         ###########################################################################
-        assert args.oracle_model_name_or_path, "PPL metric requires oracle model."
-
-        # Load the oracle model for PPL measurement
-        oracle_model, oracle_tokenizer, _ = load_oracle_model(args)
-
         # construct the collator
         data_collator = DataCollatorWithPadding(
             tokenizer=oracle_tokenizer, padding=True, pad_to_multiple_of=8
@@ -312,11 +312,6 @@ def main(args):
             load_from_cache_file=False,
             keep_in_memory=True,
         )
-
-        # clear the model just for fun
-        oracle_model = oracle_model.to(torch.device("cpu"))
-        del oracle_model
-
 
         ###########################################################################
         # P-SP evaluation
