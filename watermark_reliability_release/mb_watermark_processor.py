@@ -310,6 +310,7 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
 
         #TODO: batchify ecc with feedback
         list_of_greenlist_ids = [None for _ in input_ids]  # Greenlists could differ in length
+        list_of_blacklist_ids = [[] for _ in input_ids]
         feedback_flag = False
         for b_idx, input_seq in enumerate(input_ids):
             if self.self_salt:
@@ -346,27 +347,28 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
 
                 eta = self.feedback_args.get("eta", 3)
                 tau = self.feedback_args.get("tau", 2)
-                feedback_bias = self.feedback_args.get("feedback_bias", 5)
+                feedback_bias = self.feedback_args.get("feedback_bias", -1)
                 msg = int(self.converted_message[pos-1])
                 preliminary_cond = sum(self.green_cnt_by_position[pos]) >= eta
                 if preliminary_cond:
                     max_color = np.argmax(self.green_cnt_by_position[pos])
                     cond_1 = max_color != msg
+                    colorlist_ids = list(colorlist_ids)
                     if cond_1:
-                        # print("*Not max color*")
-                        feedback_flag = True
+                        # feedback_flag = True
+                        list_of_blacklist_ids[b_idx] = colorlist_ids[max_color]
                         continue
-                    top2_color = np.argpartition(self.green_cnt_by_position[pos], -2)[-2]
-                    color_cnt_diff = self.green_cnt_by_position[pos][max_color] - \
-                                     self.green_cnt_by_position[pos][top2_color]
-                    if tau == -1:
-                        continue
-                    cond_2 = color_cnt_diff < tau + 1
-                    if cond_2:
-                        colorlist_ids = list(colorlist_ids)
-                        del colorlist_ids[top2_color]
-                        greenlist_ids = torch.concat(colorlist_ids, dim=0)
-                        list_of_greenlist_ids[b_idx] = greenlist_ids
+                    # top2_color = np.argpartition(self.green_cnt_by_position[pos], -2)[-2]
+                    # color_cnt_diff = self.green_cnt_by_position[pos][max_color] - \
+                    #                  self.green_cnt_by_position[pos][top2_color]
+                    # if tau == -1:
+                    #     continue
+                    # cond_2 = color_cnt_diff < tau + 1
+                    # if cond_2:
+                    #     colorlist_ids = list(colorlist_ids)
+                    #     del colorlist_ids[top2_color]
+                    #     greenlist_ids = torch.concat(colorlist_ids, dim=0)
+                    #     list_of_greenlist_ids[b_idx] = greenlist_ids
 
 
         green_tokens_mask = self._calc_greenlist_mask(
@@ -374,8 +376,17 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
         )
         scores = self._bias_greenlist_logits(
             scores=scores, greenlist_mask=green_tokens_mask,
-            greenlist_bias=self.delta if not feedback_flag else feedback_bias
+            greenlist_bias=self.delta
         )
+        # suppress the black list when condition is satisfied
+        black_tokens_mask = self._calc_greenlist_mask(
+            scores=scores, greenlist_token_ids=list_of_blacklist_ids
+        )
+        scores = self._bias_greenlist_logits(
+            scores=scores, greenlist_mask=black_tokens_mask,
+            greenlist_bias=feedback_bias
+        )
+
         ## hardlisting for debugging ###
         # scores[~green_tokens_mask] = 0
         ##
