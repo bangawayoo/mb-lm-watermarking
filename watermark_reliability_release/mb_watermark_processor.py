@@ -757,7 +757,6 @@ class WatermarkDetector(WatermarkBase):
             random_prediction_list.append(converted_msg)
             cnt += 1
 
-
         msg_prediction_list = [msg_prediction]
         num_candidate_position = ceil(log2(num_candidates + 1))
         confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])[:num_candidate_position]
@@ -1035,6 +1034,7 @@ class WatermarkDetector(WatermarkBase):
     def _compute_ber(self, pred_msg: list, message: str):
         pred_msg = "".join(map(str, pred_msg))
         decimal = int(pred_msg, self.base)
+        decimal = min(decimal, 2 ** self.message_length - 1)
         binary_pred = format(decimal, f"0{self.message_length}b")
         use_ecc = False
         if use_ecc:
