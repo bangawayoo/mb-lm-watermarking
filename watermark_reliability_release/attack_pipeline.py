@@ -498,7 +498,7 @@ if __name__ == "__main__":
         args.output_dir = args.input_dir
 
     # check limit_rows
-    assert (args.limit_rows is None) or (
+    assert (args.limit_rows == -1) or (
         (args.limit_rows > 0) and isinstance(args.limit_rows, int)
     ), "limit_rows must be > 0 or None"
 

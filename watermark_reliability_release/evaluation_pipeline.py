@@ -236,7 +236,7 @@ def main(args):
 
         concat_partial = partial(concat_rows, tokenizer=tokenizer, args=args)
 
-        # manually write a btach loop bc hf doesnt support returning fewer rows than input
+        # manually write a batch loop bc hf doesnt support returning fewer rows than input
         concatenated_rows = []
         for i in tqdm(range(0, len(gen_table_ds), args.concat_rows)):
             batch = gen_table_ds[i : i + args.concat_rows]

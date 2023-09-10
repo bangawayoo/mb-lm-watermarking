@@ -19,7 +19,7 @@ DEBUG=F
 
 ### evaluation related ###
 export TOKEN_LEN=100
-export ORACLE_MODEL="meta-llama/Llama-2-13b-hf"
+export ORACLE_MODEL="meta-llama/Llama-2-7b-hf"
 export IGNORE_R_NGRAM=F
 export BATCH_SIZE=1
 ##########################
