@@ -307,6 +307,7 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
 
         # this is lazy to allow us to co-locate on the watermarked model's device
         self.rng = torch.Generator(device=input_ids.device) if self.rng is None else self.rng
+        feedback_bias = self.feedback_args.get("feedback_bias", -1)
 
         #TODO: batchify ecc with feedback
         list_of_greenlist_ids = [None for _ in input_ids]  # Greenlists could differ in length
@@ -347,7 +348,6 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
 
                 eta = self.feedback_args.get("eta", 3)
                 tau = self.feedback_args.get("tau", 2)
-                feedback_bias = self.feedback_args.get("feedback_bias", -1)
                 msg = int(self.converted_message[pos-1])
                 preliminary_cond = sum(self.green_cnt_by_position[pos]) >= eta
                 if preliminary_cond:
@@ -378,14 +378,15 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
             scores=scores, greenlist_mask=green_tokens_mask,
             greenlist_bias=self.delta
         )
-        # suppress the black list when condition is satisfied
-        black_tokens_mask = self._calc_greenlist_mask(
-            scores=scores, greenlist_token_ids=list_of_blacklist_ids
-        )
-        scores = self._bias_greenlist_logits(
-            scores=scores, greenlist_mask=black_tokens_mask,
-            greenlist_bias=feedback_bias
-        )
+        if self.feedback:
+            # suppress the black list when condition is satisfied
+            black_tokens_mask = self._calc_greenlist_mask(
+                scores=scores, greenlist_token_ids=list_of_blacklist_ids
+            )
+            scores = self._bias_greenlist_logits(
+                scores=scores, greenlist_mask=black_tokens_mask,
+                greenlist_bias=feedback_bias
+            )
 
         ## hardlisting for debugging ###
         # scores[~green_tokens_mask] = 0
