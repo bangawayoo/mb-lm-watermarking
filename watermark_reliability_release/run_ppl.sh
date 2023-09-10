@@ -3,14 +3,13 @@ export HF_ACCESS_TOKEN="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"
 huggingface-cli login --token $HF_ACCESS_TOKEN
 
 export WANDB_API_KEY="2570d8af822487be5bd6478ecc3c153ac9beede5";
-wandb online
+wandb offline
 export CUDA_VISIBLE_DEVICES="0";
 
 export HF_HOME="/workspace/cache"
-export RUN_NAME="feedback=2.5-tau=-1-eta=3-delta=1-lefthash,feedback=2-tau=-1-eta=3-delta=1-lefthash,feedback=1.5-tau=-1-eta=3-delta=1-lefthash,
-feedback=3.5-tau=-1-eta=3-delta=1-lefthash,feedback=3-tau=-1-eta=3-delta=1-lefthash"
+export RUN_NAME="16b-100T-2R,16b-100T-4R"
 
-export OUTPUT_DIR="/experiments/delta"
+export OUTPUT_DIR="experiments/"
 
 ### logging related ###
 #OUTPUT_DIR="./test"

@@ -678,18 +678,10 @@ if __name__ == "__main__":
         type=str2bool,
         default=False
     )
-    # watermarking related
     parser.add_argument(
-        "--message_length",
-        type=int,
-        default=4,
-        help="Number of bits of message to watermark",
-    )
-    parser.add_argument(
-        "--base",
-        type=int,
-        default=2,
-        help="Base (radix) of message. Defaults to bit message.",
+        "--use_gpu",
+        type=str2bool,
+        default=True
     )
     args = parser.parse_args()
 
