@@ -702,7 +702,7 @@ if __name__ == "__main__":
     # Argument validation and conditional setting
     ###########################################################################
     run_names = args.run_name.strip().split(",")
-    args.run_nam = run_names
+    args.run_name = run_names
     input_dir = [os.path.join(args.input_dir, r) for r in run_names]
     path_exist = [os.path.exists(x) for x in input_dir]
     for pe, input_d in zip(path_exist, input_dir):
