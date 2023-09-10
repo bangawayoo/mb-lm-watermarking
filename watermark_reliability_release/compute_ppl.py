@@ -66,8 +66,7 @@ disable_caching()
 
 def main(args):
 
-    # Load the oracle model for PPL measurement
-    oracle_model, oracle_tokenizer, _ = load_oracle_model(args)
+
 
     for run_name, input_dir, output_dir in zip(args.run_name, args.input_dir, args.output_dir):
         ###########################################################################
@@ -288,6 +287,9 @@ def main(args):
         # Perplexity (PPL) evaluation
         # NOTE: basically requires a model on gpu, or is extremely slow
         ###########################################################################
+        # Load the oracle model for PPL measurement
+        oracle_model, oracle_tokenizer, _ = load_oracle_model(args)
+
         # construct the collator
         data_collator = DataCollatorWithPadding(
             tokenizer=oracle_tokenizer, padding=True, pad_to_multiple_of=8
