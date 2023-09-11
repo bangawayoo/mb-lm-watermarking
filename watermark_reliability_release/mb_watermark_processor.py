@@ -263,9 +263,13 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
         return green_tokens_mask
 
     def _bias_greenlist_logits(
-        self, scores: torch.Tensor, greenlist_mask: torch.Tensor, greenlist_bias: float
+        self, scores: torch.Tensor, colorlist_mask: torch.Tensor, greenlist_bias: float,
+            denylist_flag=False
     ) -> torch.Tensor:
-        scores[greenlist_mask] = scores[greenlist_mask] + greenlist_bias
+        if denylist_flag:
+            scores[colorlist_mask] = 0
+        else:
+            scores[colorlist_mask] = scores[colorlist_mask] + greenlist_bias
         return scores
 
     def _score_rejection_sampling(
@@ -373,7 +377,7 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
             scores=scores, greenlist_token_ids=list_of_greenlist_ids
         )
         scores = self._bias_greenlist_logits(
-            scores=scores, greenlist_mask=green_tokens_mask,
+            scores=scores, colorlist_mask=green_tokens_mask,
             greenlist_bias=self.delta
         )
         if self.feedback:
@@ -382,8 +386,8 @@ class WatermarkLogitsProcessor(WatermarkBase, LogitsProcessor):
                 scores=scores, greenlist_token_ids=list_of_blacklist_ids
             )
             scores = self._bias_greenlist_logits(
-                scores=scores, greenlist_mask=black_tokens_mask,
-                greenlist_bias=feedback_bias
+                scores=scores, colorlist_mask=black_tokens_mask,
+                greenlist_bias=feedback_bias, denylist_flag=True
             )
 
         ## hardlisting for debugging ###
