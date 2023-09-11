@@ -726,7 +726,7 @@ class WatermarkDetector(WatermarkBase):
 
 
     def _predict_message(self, position_cnt, green_cnt_by_position, p_val_per_pos,
-                         num_candidates=50):
+                         num_candidates=16):
         s_time = 0
         msg_prediction = []
         confidence_per_pos = []
