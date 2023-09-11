@@ -1347,6 +1347,10 @@ if __name__ == "__main__":
 
     # convert filter_by_columns to list
     args.filter_by_columns = args.filter_by_columns.split(",")
+
+    if "essays" in args.input_dir:
+        FILTER_BY_COLUMNS.remove("baseline_completion")
+
     if args.filter_by_columns == ["all"]:
         args.filter_by_columns = FILTER_BY_COLUMNS
 
