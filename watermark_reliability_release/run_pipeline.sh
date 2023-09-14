@@ -120,6 +120,7 @@ do
         --base=$RADIX \
         --ignore_repeated_ngrams=$IGNORE_R_NGRAM \
         --target_T="$TOKEN_LEN" \
+        --lower_tolerance_T=$LOWER_TOL --upper_tolerance_T=$UPPER_TOL \
         --debug=$DEBUG --limit_rows=$LIMIT_ROWS
   fi
 done
