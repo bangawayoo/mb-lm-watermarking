@@ -225,7 +225,6 @@ def main(args):
 
     # filter the rows of the dataset based on length checks for the tokenized prompts and baseline completions
     dataset_input_len_filtered = dataset_w_prompts.filter(input_check, batched=False)
-
     # need to remove the input tensor column after this map
     # bc it persists between the prompt creation and generation maps
     columns_to_remove = args.columns_to_remove + ["input_ids"]

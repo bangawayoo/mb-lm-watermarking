@@ -138,7 +138,7 @@ def load_hf_dataset(args):
     elif dataset_name == "cml_pile":
         subsets = [dataset_config_name]
         dataset = load_dataset(
-            "./data/cml_pile.py",
+            "./utils/data/cml_pile.py",
             subsets=subsets,
             streaming=args.stream_dataset,
             split=None,

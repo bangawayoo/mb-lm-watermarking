@@ -63,13 +63,13 @@ do
     python generation_pipeline.py \
         --model_name=$MODEL_PATH \
         --dataset_name=$D_NAME \
-        --dataset_config_name=realnewslike \
+        --dataset_config_name=$D_CONFIG \
         --max_new_tokens=$TOKEN_LEN \
         --min_prompt_tokens=50 \
         --limit_indices=5000 \
         --min_generations=$MIN_GEN \
         --input_truncation_strategy=completion_length \
-        --input_filtering_strategy=prompt_and_completion_length \
+        --input_filtering_strategy=$INPUT_FILTER \
         --output_filtering_strategy=max_new_tokens \
         --use_sampling $SAMPLING \
         --num_beam $NUM_BEAMS \
