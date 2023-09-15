@@ -1348,7 +1348,8 @@ if __name__ == "__main__":
     # convert filter_by_columns to list
     args.filter_by_columns = args.filter_by_columns.split(",")
 
-    if "essays" in args.input_dir:
+    # exclude filtering baseline_completion for those datasets that have longer tokens
+    if "essays" in args.input_dir or "lfqa" in args.input_dir:
         FILTER_BY_COLUMNS.remove("baseline_completion")
 
     if args.filter_by_columns == ["all"]:
