@@ -468,6 +468,8 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update(dict(cand_acc_ablation=float("nan")))
         score_dict.update(dict(cand_match_ablation=float("nan")))
         score_dict.update(dict(decoding_time=float("nan")))
+        score_dict.update(dict(confidence_per_position=[]))
+        score_dict.update(dict(error_pos=[]))
 
         # if return_z_score_max:
         #     score_dict.update(dict(z_score_max=float("nan")))
@@ -573,6 +575,15 @@ class WatermarkDetector(WatermarkBase):
             cb, tb, _ = self._compute_ber(msg, gold_message)
             prediction_results['random'].append(cb)
 
+        # thresholding ambiguous tokens
+        our_green_token = 0
+        for p in range(1, self.converted_msg_length + 1):
+            green_cnts = np.array(green_cnt_by_position[p])
+            top2_val = green_cnts[np.argsort(green_cnts)[-2:]]
+            # if abs(top2_val[0] - top2_val[1]) == 0:
+            #     continue
+            our_green_token += top2_val[-1]
+
         if False:
             if kwargs['col_name'] == "w_wm_output":
                 print(gold_message)
@@ -633,6 +644,8 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update({'max_pos_ratio': max_val / sum_val})
         score_dict.update(dict(custom_metric=-sum(p_val_per_position)))
         score_dict.update(dict(decoding_time=elapsed_time))
+        score_dict.update(dict(confidence_per_position=p_val_per_position))
+        score_dict.update(dict(error_pos=error_pos))
         if return_bit_match:
             score_dict.update(dict(bit_acc=correct_bits / total_bits))
             score_dict.update(dict(bit_match=correct_bits == total_bits))
@@ -654,7 +667,7 @@ class WatermarkDetector(WatermarkBase):
             if z_score is None:
                 z_score = self._compute_z_score(green_token_count, num_tokens_scored)
             score_dict.update(
-                dict(z_score=self._compute_z_score(green_token_count, num_tokens_scored))
+                dict(z_score=z_score)
             )
         if return_p_value:
             z_score = score_dict.get("z_score")
@@ -708,13 +721,17 @@ class WatermarkDetector(WatermarkBase):
         The computation follows from Levin, Bruce. "A representation for multinomial cumulative distribution functions."
         The Annals of Statistics (1981): 1123-1126.
         """
+        if T <= 0:
+            return 1
         poiss = scipy.stats.poisson
+        normal = scipy.stats.norm
         k = self.base
         s = T
         a = observed_count - 1
-        binom_cdf = binom.cdf(a, T, 1 / k)
-        poiss_pmf = poiss.pmf(T, s)
-        max_multi_cdf = math.factorial(T) / s ** T / math.exp(-s) * (binom_cdf ** k) * poiss_pmf
+        poiss_cdf_X = poiss.cdf(a, T / k)
+        normal_approx_W = normal.cdf(0.5 / np.sqrt(T)) - normal.cdf(-0.5 / np.sqrt(T))
+        log_max_multi_cdf = math.log(np.sqrt(2 * math.pi * T)) + k * math.log(poiss_cdf_X) + math.log(normal_approx_W)
+        max_multi_cdf = math.exp(log_max_multi_cdf)
         p_val = 1 - min(1, max_multi_cdf)
         return p_val
 
