@@ -541,10 +541,7 @@ class WatermarkDetector(WatermarkBase):
         position_cnt = {}
         for k, v in ngram_to_position_lookup.items():
             freq = frequencies_table[k]
-            if self.ignore_repeated_ngrams:
-                position_cnt[v] = position_cnt.get(v, 0) + 1
-            else:
-                position_cnt[v] = position_cnt.get(v, 0) + freq
+            position_cnt[v] = position_cnt.get(v, 0) + freq
 
         # compute confidence per position
         p_val_per_position = []
@@ -574,15 +571,6 @@ class WatermarkDetector(WatermarkBase):
         for msg in ran_list_decoded_msg:
             cb, tb, _ = self._compute_ber(msg, gold_message)
             prediction_results['random'].append(cb)
-
-        # thresholding ambiguous tokens
-        our_green_token = 0
-        for p in range(1, self.converted_msg_length + 1):
-            green_cnts = np.array(green_cnt_by_position[p])
-            top2_val = green_cnts[np.argsort(green_cnts)[-2:]]
-            # if abs(top2_val[0] - top2_val[1]) == 0:
-            #     continue
-            our_green_token += top2_val[-1]
 
         if False:
             if kwargs['col_name'] == "w_wm_output":
@@ -617,6 +605,10 @@ class WatermarkDetector(WatermarkBase):
             # We iterate over all unique token ngrams in the input, computing the greenlist
             # induced by the context in each, and then checking whether the last
             # token falls in that greenlist.
+            # compute it again in case
+            position_cnt = {}
+            for k, v in ngram_to_position_lookup.items():
+                position_cnt[v] = position_cnt.get(v, 0) + 1
             num_tokens_scored = len(frequencies_table.keys())
             green_token_count = sum(ngram_to_watermark_lookup.values())
         else:

@@ -101,6 +101,7 @@ do
         --cp_attack_insertion_len "${srcp}" \
         --cp_attack_type=$CP_ATT_TYPE \
         --input_dir="$GENERATION_OUTPUT_DIR" \
+        --output_dir="$OUTPUT_DIR"/"${RUN_NAME}_${ATTACK_M}-${ATTACK_SUFFIX}attack" \
         --verbose=True --overwrite_output_file T \
         --limit_rows=$LIMIT_ROWS \
         --order=$DIPPER_ORDER \
