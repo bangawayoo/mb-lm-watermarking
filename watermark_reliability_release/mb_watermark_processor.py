@@ -773,7 +773,8 @@ class WatermarkDetector(WatermarkBase):
 
         elapsed_time = time.time() - s_time
         random_prediction_list = [msg_prediction]
-        # sampled random bits
+
+        # sample random bits
         cnt = 0
         while cnt < num_candidates:
             msg_decimal = random.getrandbits(self.message_length)
@@ -784,6 +785,7 @@ class WatermarkDetector(WatermarkBase):
 
         msg_prediction_list = [msg_prediction]
         num_candidate_position = ceil(log2(num_candidates + 1))
+        # sort by the least confident positions
         confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])[:num_candidate_position]
         cnt = 0
         candidate_iter = iter(powerset(confidence_per_pos))

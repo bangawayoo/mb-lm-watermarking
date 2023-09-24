@@ -102,7 +102,9 @@ do
         --cp_attack_type=$CP_ATT_TYPE \
         --input_dir="$GENERATION_OUTPUT_DIR" \
         --verbose=True --overwrite_output_file T \
-        --limit_rows=$LIMIT_ROWS
+        --limit_rows=$LIMIT_ROWS \
+        --order=$DIPPER_ORDER \
+        --lex=$DIPPER_LEX
   fi
 
   if [ $RUN_EVAL == T ]
