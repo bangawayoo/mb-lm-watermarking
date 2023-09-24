@@ -105,9 +105,10 @@ do
         --limit_rows=$LIMIT_ROWS \
         --order=$DIPPER_ORDER \
         --lex=$DIPPER_LEX
+
+    GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"${RUN_NAME}_${ATTACK_M}-${ATTACK_SUFFIX}attack"
   fi
 
-  GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"${RUN_NAME}_${ATTACK_M}-${ATTACK_SUFFIX}attack"
   if [ $RUN_EVAL == T ]
   then
     python evaluation_pipeline.py \
