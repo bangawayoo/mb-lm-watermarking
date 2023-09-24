@@ -107,6 +107,7 @@ do
         --lex=$DIPPER_LEX
   fi
 
+  GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"${RUN_NAME}_${ATTACK_M}-${ATTACK_SUFFIX}attack"
   if [ $RUN_EVAL == T ]
   then
     python evaluation_pipeline.py \
