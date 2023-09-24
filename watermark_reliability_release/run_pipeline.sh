@@ -96,7 +96,7 @@ do
   then
     python attack_pipeline.py \
         --attack_method="${ATTACK_M}" \
-        --run_name="${RUN_NAME}_${ATTACK_M}-attack" \
+        --run_name="${RUN_NAME}_${ATTACK_M}-${ATTACK_SUFFIX}attack" \
         --wandb=$WANDB \
         --cp_attack_insertion_len "${srcp}" \
         --cp_attack_type=$CP_ATT_TYPE \
