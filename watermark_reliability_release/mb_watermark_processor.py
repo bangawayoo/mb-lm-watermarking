@@ -454,6 +454,7 @@ class WatermarkDetector(WatermarkBase):
     ):
         # HF-style output dictionary
         score_dict = dict()
+        score_dict.update(dict(pred_message=""))
         score_dict.update({'min_pos_ratio': float("nan")})
         score_dict.update({'max_pos_ratio': float("nan")})
         score_dict.update(dict(custom_metric=float("nan")))
@@ -628,7 +629,7 @@ class WatermarkDetector(WatermarkBase):
         score_dict = dict()
         sampled_positions = "" if len(position_list) == 0 else "".join(list(map(str, position_list)))
         score_dict.update(dict(sampled_positions=sampled_positions))
-
+        score_dict.update(dict(pred_message="".join(map(str, best_prediction))))
         min_val = min(position_cnt.values())
         max_val = max(position_cnt.values())
         sum_val = sum(position_cnt.values())

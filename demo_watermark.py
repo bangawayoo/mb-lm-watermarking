@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import os
+import sys
 import argparse
 from argparse import Namespace
 from pprint import pprint
@@ -28,9 +29,12 @@ import torch
 from transformers import (AutoTokenizer,
                           AutoModelForSeq2SeqLM,
                           AutoModelForCausalLM,
-                          LogitsProcessorList)
+                          LogitsProcessorList,
+                          LlamaTokenizer)
 
-from mb_watermark_processor import WatermarkLogitsProcessor, WatermarkDetector
+sys.path.append("./watermark_reliability_release/")
+# from mb_watermark_processor import WatermarkLogitsProcessor, WatermarkDetector
+from watermark_reliability_release.mb_watermark_processor import WatermarkLogitsProcessor, WatermarkDetector
 
 def str2bool(v):
     """Util function for user friendly boolean flag args"""
@@ -133,7 +137,7 @@ def parse_args():
         help="Single or comma separated list of the preprocessors/normalizer names to use when performing watermark detection.",
     )
     parser.add_argument(
-        "--ignore_repeated_bigrams",
+        "--ignore_repeated_ngrams",
         type=str2bool,
         default=False,
         help="Whether to use the detection method that only counts each unqiue bigram once as either a green or red hit.",
@@ -165,8 +169,69 @@ def parse_args():
     parser.add_argument(
         "--load_fp16",
         type=str2bool,
+        default=True,
+        help="Whether to run model in float16 precision.",
+    )
+    # multi-bit configuration
+    parser.add_argument(
+        "--message_length",
+        type=int,
+        default=4,
+        help="Number of bits of message to watermark",
+    )
+    parser.add_argument(
+        "--code_length",
+        type=int,
+        default=4,
+        help="Length of the actual code to watermark when using error correcting algoritm",
+    )
+    parser.add_argument(
+        "--base",
+        type=int,
+        default=4,
+        help="Base (radix) of message. Defaults to bit message.",
+    )
+    parser.add_argument(
+        "--zero_bit",
+        type=str2bool,
         default=False,
-        help="Whether to run model in float16 precsion.",
+        help="When true, this is a special case of zero-bit; all messages are set to 0.",
+    )
+    parser.add_argument(
+        "--use_position_prf",
+        type=str2bool,
+        default=False,
+        help="When true, the position seed will be determined by a different prf scheme"
+    )
+    parser.add_argument(
+        "--use_fixed_position",
+        type=str2bool,
+        default=False,
+        help="When true, the position seed will be sampled with a fixed seed (rotation)"
+    )
+    parser.add_argument(
+        "--use_feedback",
+        type=str2bool,
+        default=False,
+        help="When true, encoding will do error correcting using feedbacks"
+    )
+    parser.add_argument(
+        "--feedback_bias",
+        type=float,
+        default=2,
+        help="magnitude of bias when using feedback"
+    )
+    parser.add_argument(
+        "--feedback_eta",
+        type=int,
+        default=2,
+        help="number of tokens per position to observe after staring to correct"
+    )
+    parser.add_argument(
+        "--feedback_tau",
+        type=int,
+        default=2,
+        help="Parameter of condition 1"
     )
     args = parser.parse_args()
     return args
@@ -174,31 +239,86 @@ def parse_args():
 def load_model(args):
     """Load and return the model and tokenizer"""
 
-    args.is_seq2seq_model = any([(model_type in args.model_name_or_path) for model_type in ["t5","T0"]])
-    args.is_decoder_only_model = any([(model_type in args.model_name_or_path) for model_type in ["gpt","opt","bloom"]])
+    args.is_seq2seq_model = any(
+        [(model_type in args.model_name_or_path) for model_type in ["t5", "T0"]]
+    )
+    args.is_decoder_only_model = any(
+        [(model_type in args.model_name_or_path) for model_type in ["gpt", "opt", "bloom", "llama"]]
+    )
     if args.is_seq2seq_model:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path)
     elif args.is_decoder_only_model:
-        if args.load_fp16:
-            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path,torch_dtype=torch.float16, device_map='auto')
-        else:
-            model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+        dtype = torch.float16 if args.load_fp16 else torch.float32
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_name_or_path, torch_dtype=dtype, device_map="auto"
+        )
     else:
         raise ValueError(f"Unknown model type: {args.model_name_or_path}")
 
     if args.use_gpu:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        if args.load_fp16: 
-            pass
-        else: 
-            model = model.to(device)
+        # if args.load_fp16:
+        #     pass
+        # else:
+        #     model = model.to(device)
     else:
         device = "cpu"
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+    if args.is_decoder_only_model:
+        padding_side = "left"
+    else:
+        raise NotImplementedError(
+            "Need to check how to handle padding for seq2seq models when calling generate"
+        )
+
+    if "llama" in args.model_name_or_path:
+        tokenizer = LlamaTokenizer.from_pretrained(
+            args.model_name_or_path, padding_side=padding_side
+        )
+        model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
+        model.config.bos_token_id = 1
+        model.config.eos_token_id = 2
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.model_name_or_path, padding_side=padding_side
+        )
+        # for GPT2 and other variants that do not have padding tokens
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+    args.model_max_length = model.config.max_position_embeddings
 
     return model, tokenizer, device
+
+def load_detector(args):
+    if "llama" in args.model_name_or_path:
+        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path)
+        tokenizer.pad_token_id = 0  # unk
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+
+    device = "cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu"
+    wm_kwargs = {
+        'use_position_prf': args.use_position_prf,
+        'use_fixed_position': args.use_fixed_position,
+        'code_length': args.code_length
+    }
+    watermark_detector = WatermarkDetector(
+        vocab=list(tokenizer.get_vocab().values()),
+        gamma=args.gamma,
+        seeding_scheme=args.seeding_scheme,
+        device=device,
+        tokenizer=tokenizer,
+        z_threshold=args.detection_z_threshold,
+        normalizers=args.normalizers,
+        ignore_repeated_ngrams=args.ignore_repeated_ngrams,
+        message_length=args.message_length,
+        base=args.base,
+        **wm_kwargs
+    )
+
+    return watermark_detector
 
 def generate(prompt, args, model=None, device=None, tokenizer=None):
     """Instatiate the WatermarkLogitsProcessor according to the watermark parameters
@@ -206,13 +326,27 @@ def generate(prompt, args, model=None, device=None, tokenizer=None):
        as a logits processor. """
     
     print(f"Generating with {args}")
-    watermark_processor = WatermarkLogitsProcessor(vocab=list(tokenizer.get_vocab().values()),
-                                                    gamma=args.gamma,
-                                                    delta=args.delta,
-                                                    seeding_scheme=args.seeding_scheme,
-                                                    select_green_tokens=args.select_green_tokens,
-                                                    message=args.message,
-                                                   )
+    wm_kwargs = {
+            'use_position_prf': args.use_position_prf,
+            'use_fixed_position': args.use_fixed_position,
+            'code_length': args.message_length,
+            'use_feedback': args.use_feedback,
+            'feedback_args': {'eta': args.feedback_eta,
+                              'tau': args.feedback_tau,
+                              'feedback_bias': args.feedback_bias
+                              }
+                 }
+    watermark_processor = WatermarkLogitsProcessor(
+        vocab=list(tokenizer.get_vocab().values()),
+        gamma=args.gamma,
+        delta=args.delta,
+        base=args.base,
+        seeding_scheme=args.seeding_scheme,
+        select_green_tokens=True,
+        message_length=args.message_length,
+        device="cuda" if (args.use_gpu and torch.cuda.is_available()) else "cpu",
+        **wm_kwargs
+    )
 
     gen_kwargs = dict(max_new_tokens=args.max_new_tokens)
 
@@ -306,25 +440,25 @@ def list_format_scores(score_dict, detection_threshold):
 def detect(input_text, args, device=None, tokenizer=None):
     """Instantiate the WatermarkDetection object and call detect on
         the input text returning the scores and outcome of the test"""
-    watermark_detector = WatermarkDetector(vocab=list(tokenizer.get_vocab().values()),
-                                        gamma=args.gamma,
-                                        seeding_scheme=args.seeding_scheme,
-                                        device=device,
-                                        tokenizer=tokenizer,
-                                        z_threshold=args.detection_z_threshold,
-                                        normalizers=args.normalizers,
-                                        ignore_repeated_bigrams=args.ignore_repeated_bigrams,
-                                        select_green_tokens=args.select_green_tokens,
-                                        message_length=args.message_length
+    watermark_detector = load_detector(args)
+    score_dict = watermark_detector.detect(input_text,
+                                           message=args.message,
+                                           col_name="dummy",
+                                           position="0000"
                                            )
-    if len(input_text)-1 > watermark_detector.min_prefix_len:
-        score_dict = watermark_detector.detect(input_text)
-        # output = str_format_scores(score_dict, watermark_detector.z_threshold)
-        output = list_format_scores(score_dict, watermark_detector.z_threshold)
+    # process the output here
+    output = {}
+    if score_dict['z_score'] == float("nan"):
+        output = {}
+        # output = [["Error", "string too short to compute metrics"]]
+        # output += [["", ""] for _ in range(6)]
     else:
-        # output = (f"Error: string not long enough to compute watermark presence.")
-        output = [["Error","string too short to compute metrics"]]
-        output += [["",""] for _ in range(6)]
+        # bit_acc, pred_message, prediction, z-score
+        output['message prediction'] = score_dict['pred_message']
+        output['source prediction'] = score_dict['prediction']
+        output['z-score'] = score_dict['z_score']
+        output['bit acc.'] = score_dict['bit_acc']
+
     return output, args
 
 def run_gradio(args, model=None, device=None, tokenizer=None):
@@ -614,7 +748,7 @@ def run_gradio(args, model=None, device=None, tokenizer=None):
     if args.demo_public:
         demo.launch(share=True) # exposes app to the internet via randomly generated link
     else:
-        demo.launch()
+        demo.launch(share=True, server_name="0.0.0.0", server_port=8001)
 
 def main(args): 
     """Run a command line version of the generation and detection operations
@@ -629,31 +763,13 @@ def main(args):
         model, tokenizer, device = None, None, None
 
     # Generate and detect, report to stdout
-    args.message = "00001111"
+    args.message = "0111"
     args.message_length = len(args.message)
 
     if not args.skip_model_load:
         input_text = (
         "The diamondback terrapin or simply terrapin (Malaclemys terrapin) is a "
-        "species of turtle native to the brackish coastal tidal marshes of the "
-        "Northeastern and southern United States, and in Bermuda.[6] It belongs "
-        "to the monotypic genus Malaclemys. It has one of the largest ranges of "
-        "all turtles in North America, stretching as far south as the Florida Keys "
-        "and as far north as Cape Cod.[7] The name 'terrapin' is derived from the "
-        "Algonquian word torope.[8] It applies to Malaclemys terrapin in both "
-        "British English and American English. The name originally was used by "
-        "early European settlers in North America to describe these brackish-water "
-        "turtles that inhabited neither freshwater habitats nor the sea. It retains "
-        "this primary meaning in American English.[8] In British English, however, "
-        "other semi-aquatic turtle species, such as the red-eared slider, might "
-        "also be called terrapins. The common name refers to the diamond pattern "
-        "on top of its shell (carapace), but the overall pattern and coloration "
-        "vary greatly. The shell is usually wider at the back than in the front, "
-        "and from above it appears wedge-shaped. The shell coloring can vary "
-        "from brown to grey, and its body color can be grey, brown, yellow, "
-        "or white. All have a unique pattern of wiggly, black markings or spots "
-        "on their body and head. The diamondback terrapin has large webbed "
-        "feet.[9] The species is"
+        "species of turtle"
         )
 
         args.default_prompt = input_text
@@ -672,11 +788,14 @@ def main(args):
                                                     args,
                                                     device=device,
                                                     tokenizer=tokenizer)
-        with_watermark_detection_result = detect(decoded_output_with_watermark, 
+        with_watermark_detection_result = detect(decoded_output_with_watermark,
                                                  args, 
                                                  device=device, 
                                                  tokenizer=tokenizer)
 
+        print(without_watermark_detection_result[0])
+        print(with_watermark_detection_result[0])
+        breakpoint()
         print("#"*term_width)
         print("Output without watermark:")
         print(decoded_output_without_watermark)
