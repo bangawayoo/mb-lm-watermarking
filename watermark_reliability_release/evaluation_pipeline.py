@@ -608,6 +608,8 @@ def main(args):
                 run.summary[f"{filtered_name}_mean"] = filtered_table[metric_name].mean()
                 run.summary[f"{filtered_name}_std"] = filtered_table[metric_name].std()
             except TypeError:
+                if metric_name == "w_wm_output_attacked_error_pos":
+                    continue
                 two_dim_mean = filtered_table[metric_name].apply(np.mean).mean()
 
         ###########################################################################

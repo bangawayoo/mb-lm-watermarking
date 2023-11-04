@@ -1,8 +1,8 @@
 #!/bin/bash
-export HF_ACCESS_TOKEN="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"
+export HF_ACCESS_TOKEN=""
 huggingface-cli login --token $HF_ACCESS_TOKEN
 
-export WANDB_API_KEY="2570d8af822487be5bd6478ecc3c153ac9beede5";
+export WANDB_API_KEY="";
 wandb offline
 export CUDA_VISIBLE_DEVICES="0";
 
