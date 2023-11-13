@@ -49,7 +49,7 @@ def load_model(args):
         [(model_type in args.model_name_or_path) for model_type in ["t5", "T0"]]
     )
     args.is_decoder_only_model = any(
-        [(model_type in args.model_name_or_path.lower()) for model_type in ["gpt", "opt", "bloom", "llama"]]
+        [(model_type in args.model_name_or_path.lower()) for model_type in ["gpt", "opt", "bloom", "llama", "mistral"]]
     )
     if args.is_seq2seq_model:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path)
@@ -383,8 +383,9 @@ def tokenize_for_generation(
 ):
     # preprocessing, generation & scoring
     assert isinstance(example, dict), "Expect no batch dimension currently!"
-    # example['text'] = "Write a complete essay with an introduction, main body, and conclusion following the below instructions:\n" + example['text']
-    example['text'] = "Complete the following news article: " + example['text']
+    # example['instructions'] = "<s>[INST] Write a complete essay with an introduction, main body, and conclusion following the below instructions.[/INST]" \
+    #                   + example['instructions']
+    example['text'] = "<s>[INST] Complete the following news article: [/INST]" + example['text']
     if not args.truncate_input_for_prompt:
         tokenize_ref_output = True  # NOTE, note really sure how necessary this is
         # preprocess for model generation/completion
