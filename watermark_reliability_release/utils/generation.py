@@ -383,7 +383,8 @@ def tokenize_for_generation(
 ):
     # preprocessing, generation & scoring
     assert isinstance(example, dict), "Expect no batch dimension currently!"
-    # example['text'] = "Complete the following news article:\n" + example['text']
+    # example['text'] = "Write a complete essay with an introduction, main body, and conclusion following the below instructions:\n" + example['text']
+    example['text'] = "Complete the following news article: " + example['text']
     if not args.truncate_input_for_prompt:
         tokenize_ref_output = True  # NOTE, note really sure how necessary this is
         # preprocess for model generation/completion
