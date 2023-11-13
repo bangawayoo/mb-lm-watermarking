@@ -49,7 +49,7 @@ def load_model(args):
         [(model_type in args.model_name_or_path) for model_type in ["t5", "T0"]]
     )
     args.is_decoder_only_model = any(
-        [(model_type in args.model_name_or_path) for model_type in ["gpt", "opt", "bloom", "llama"]]
+        [(model_type in args.model_name_or_path.lower()) for model_type in ["gpt", "opt", "bloom", "llama"]]
     )
     if args.is_seq2seq_model:
         model = AutoModelForSeq2SeqLM.from_pretrained(args.model_name_or_path)
@@ -383,7 +383,7 @@ def tokenize_for_generation(
 ):
     # preprocessing, generation & scoring
     assert isinstance(example, dict), "Expect no batch dimension currently!"
-
+    # example['text'] = "Complete the following news article:\n" + example['text']
     if not args.truncate_input_for_prompt:
         tokenize_ref_output = True  # NOTE, note really sure how necessary this is
         # preprocess for model generation/completion
@@ -533,8 +533,10 @@ def generate(
 
     return examples
 
-
-from reedmuller import reedmuller
+try:
+    from reedmuller import reedmuller
+except:
+    print("Error loading error correcting code module")
 
 def sample_message(msg_length, use_ecc, ecc_params=None):
     msg_decimal = random.getrandbits(msg_length)

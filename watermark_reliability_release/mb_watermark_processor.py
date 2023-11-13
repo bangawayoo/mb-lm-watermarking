@@ -573,6 +573,7 @@ class WatermarkDetector(WatermarkBase):
             cb, tb, _ = self._compute_ber(msg, gold_message)
             prediction_results['random'].append(cb)
 
+        # for debugging
         if False:
             if kwargs['col_name'] == "w_wm_output":
                 print(gold_message)
@@ -1080,8 +1081,9 @@ class WatermarkDetector(WatermarkBase):
         for pos, (g, p) in enumerate(zip(message, binary_pred)):
             if g == p:
                 match += 1
+                error_pos.append(False)
             else:
-                error_pos.append(pos)
+                error_pos.append(True)
             total += 1
         return match, total, error_pos
 

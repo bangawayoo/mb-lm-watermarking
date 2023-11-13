@@ -5,7 +5,6 @@
 #export HF_DATASETS_CACHE="/cache"
 #export HF_HOME="/cache"
 #export CUDA_VISIBLE_DEVICES="0"
-huggingface-cli login --token $HF_ACCESS_TOKEN
 
 
 
@@ -51,7 +50,7 @@ huggingface-cli login --token $HF_ACCESS_TOKEN
 ### logging ###
 #  RUN_NAME="32b"
 GENERATION_OUTPUT_DIR="$OUTPUT_DIR"/"$RUN_NAME"
-echo "Running generation pipeline with output dir: $GENERATION_OUTPUT_DIR"
+echo "Running pipeline with output dir: $GENERATION_OUTPUT_DIR"
 ###############
 if [ $RUN_GEN == T ]
 then
@@ -73,16 +72,12 @@ then
       --delta=$DELTA \
       --base=$RADIX \
       --zero_bit=$ZERO_BIT \
-      --use_position_prf=$USE_PPRF \
-      --use_fixed_position=$USE_FIXP \
-      --use_feedback=$FEEDBACK --feedback_bias=$F_BIAS \
-      --feedback_eta=$F_ETA --feedback_tau=$F_TAU \
       --run_name="$RUN_NAME"_gen \
       --wandb=$WANDB \
       --verbose=True \
       --output_dir="$GENERATION_OUTPUT_DIR" \
       --overwrite T \
-      --message_length="$MSG_LEN" --code_length="$CODE_LEN" \
+      --message_length="$MSG_LEN" --code_length="$MSG_LEN" \
       --generation_batch_size="$BS" \
       --load_fp16 $FP16
 fi
