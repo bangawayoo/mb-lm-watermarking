@@ -483,20 +483,6 @@ def generate(
     print(f"Converted msg:\n{watermark_processor.converted_message}")
     messages = [msg_binary] * len(examples['input_ids'])
 
-    if True:
-        examples.update(
-            {
-                "no_wm_output": [" "],
-                "w_wm_output": [" "],
-                "sampled_positions": [" "],
-                "message": messages,
-                "no_wm_output_length": [0],
-                "w_wm_output_length": [0],
-                'wm_encoding_time': [0],
-                'non_wm_encoding_time': [0]}
-        )
-        return examples
-
 
     with torch.no_grad():
         if args.generation_seed is not None:
