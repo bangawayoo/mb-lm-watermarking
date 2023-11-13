@@ -60,7 +60,7 @@ then
       --dataset_config_name=$D_CONFIG \
       --max_new_tokens=$TOKEN_LEN \
       --min_prompt_tokens=50 \
-      --limit_indices=5000 \
+      --limit_indices=$LIMIT_ROWS \
       --min_generations=$MIN_GEN \
       --input_truncation_strategy=completion_length \
       --input_filtering_strategy=$INPUT_FILTER \

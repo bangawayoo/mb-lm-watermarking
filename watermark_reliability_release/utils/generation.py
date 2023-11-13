@@ -383,8 +383,8 @@ def tokenize_for_generation(
 ):
     # preprocessing, generation & scoring
     assert isinstance(example, dict), "Expect no batch dimension currently!"
-    example['instructions'] = "<s>[INST] Write a complete essay with an introduction, main body, and conclusion following the below instructions.[/INST]" \
-                      + example['instructions']
+    # example['instructions'] = "<s>[INST] Write a complete essay with an introduction, main body, and conclusion following the below instructions.[/INST]" \
+    #                   + example['instructions']
     # example['text'] = "<s>[INST] Complete the following news article: [/INST]" + example['text']
     if not args.truncate_input_for_prompt:
         tokenize_ref_output = True  # NOTE, note really sure how necessary this is
@@ -482,20 +482,20 @@ def generate(
     print(f"Binary encoded msg:\n{msg_encoded}")
     print(f"Converted msg:\n{watermark_processor.converted_message}")
     messages = [msg_binary] * len(examples['input_ids'])
-    #
-    # if True:
-    #     examples.update(
-    #         {
-    #             "no_wm_output": [" "],
-    #             "w_wm_output": [" "],
-    #             "sampled_positions": [" "],
-    #             "message": messages,
-    #             "no_wm_output_length": [0],
-    #             "w_wm_output_length": [0],
-    #             'wm_encoding_time': [0],
-    #             'non_wm_encoding_time': [0]}
-    #     )
-    #     return examples
+
+    if True:
+        examples.update(
+            {
+                "no_wm_output": [" "],
+                "w_wm_output": [" "],
+                "sampled_positions": [" "],
+                "message": messages,
+                "no_wm_output_length": [0],
+                "w_wm_output_length": [0],
+                'wm_encoding_time': [0],
+                'non_wm_encoding_time': [0]}
+        )
+        return examples
 
 
     with torch.no_grad():
