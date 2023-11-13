@@ -1067,7 +1067,7 @@ class WatermarkDetector(WatermarkBase):
             else:
                 binary_pred = binary_pred[:self.original_msg_length]
 
-        # predicted binary message is longer because the last chunk was right-padded
+        # predicted binary message may be longer because the last chunk was right-padded
         if len(binary_pred) != len(message):
             print(f"Predicted msg: {pred_msg}")
             print(f"Predicted binary msg: {binary_pred}")
