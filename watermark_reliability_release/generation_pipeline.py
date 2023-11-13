@@ -280,7 +280,6 @@ def main(args):
             i += 1
             pbar.update(1)
         else:
-            i += 1
             print(
                 f"\n{i} of {len(processed_examples)} rows were satisfactory so far, {round(i/args.min_generations, 2)} of total.",
                 f"\nCurrent generation overhead ratio: {round(len(processed_examples)/(i+1), 3)}.",
