@@ -475,6 +475,8 @@ def generate(
     else:
         use_ecc = False
         msg_binary, msg_encoded = sample_message(msg_length, use_ecc)
+        msg_binary = msg_encoded = msg_length * "0"
+
 
     # watermark_processor.set_message(msg_binary)
     watermark_processor.set_message(msg_encoded)
