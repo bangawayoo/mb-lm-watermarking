@@ -466,6 +466,9 @@ class WatermarkDetector(WatermarkBase):
         score_dict.update(dict(cand_acc_2=float("nan")))
         score_dict.update(dict(cand_acc_4=float("nan")))
         score_dict.update(dict(cand_acc_8=float("nan")))
+        score_dict.update(dict(cand_acc_ablation_2=float("nan")))
+        score_dict.update(dict(cand_acc_ablation_4=float("nan")))
+        score_dict.update(dict(cand_acc_ablation_8=float("nan")))
         score_dict.update(dict(cand_acc_ablation=float("nan")))
         score_dict.update(dict(cand_match_ablation=float("nan")))
         score_dict.update(dict(decoding_time=float("nan")))
@@ -650,6 +653,10 @@ class WatermarkDetector(WatermarkBase):
             score_dict.update(dict(cand_acc_4=max(prediction_results['confidence'][:5]) / total_bits))
             score_dict.update(dict(cand_acc_8=max(prediction_results['confidence'][:9]) / total_bits))
             score_dict.update(dict(cand_acc_ablation=max(prediction_results['random']) / total_bits))
+            score_dict.update(dict(cand_acc_ablation_2=max(prediction_results['random'][:3]) / total_bits))
+            score_dict.update(dict(cand_acc_ablation_4=max(prediction_results['random'][:5]) / total_bits))
+            score_dict.update(dict(cand_acc_ablation_8=max(prediction_results['random'][:9]) / total_bits))
+
         if return_num_tokens_scored:
             score_dict.update(dict(num_tokens_scored=num_tokens_scored))
         if return_num_green_tokens:
@@ -769,18 +776,27 @@ class WatermarkDetector(WatermarkBase):
         random_prediction_list = [msg_prediction]
 
         # sample random bits
-        cnt = 0
-        while cnt < num_candidates:
-            msg_decimal = random.getrandbits(self.message_length)
-            converted_msg = self._numberToBase(msg_decimal, self.base)
-            converted_msg = "0" * (self.converted_msg_length - len(converted_msg)) + converted_msg
-            random_prediction_list.append(converted_msg)
-            cnt += 1
+        # cnt = 0
+        # while cnt < num_candidates:
+        #     msg_decimal = random.getrandbits(self.message_length)
+        #     converted_msg = self._numberToBase(msg_decimal, self.base)
+        #     converted_msg = "0" * (self.converted_msg_length - len(converted_msg)) + converted_msg
+        #     random_prediction_list.append(converted_msg)
+        #     cnt += 1
 
-        msg_prediction_list = [msg_prediction]
         num_candidate_position = ceil(log2(num_candidates + 1))
+        random.shuffle(confidence_per_pos)
+        # confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])
+        random_prediction_list = [msg_prediction]
+        for idx in range(num_candidates):
+            cand_msg = msg_prediction.copy()
+            _, max_idx, next_idx, pos = confidence_per_pos[idx]
+            cand_msg[pos - 1] = next_idx
+            random_prediction_list.append(cand_msg)
+
         # sort by the least confident positions
         confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])[:num_candidate_position]
+        msg_prediction_list = [msg_prediction]
         cnt = 0
         candidate_iter = iter(powerset(confidence_per_pos))
         while cnt < num_candidates:
@@ -1072,7 +1088,6 @@ class WatermarkDetector(WatermarkBase):
             print(f"Predicted msg: {pred_msg}")
             print(f"Predicted binary msg: {binary_pred}")
             print(f"Gold msg: {message}")
-            breakpoint()
             raise RuntimeError("Extracted message length is shorter the original message!")
 
         match = 0
