@@ -180,9 +180,8 @@ def main(args):
     ###########################################################################
     # Configure the generation partials
     ###########################################################################
-
     gen_kwargs = dict(max_new_tokens=args.max_new_tokens)
-
+    logit_processors = []
     # FIXME can add typica
     if args.use_sampling:
         gen_kwargs.update(
@@ -195,11 +194,19 @@ def main(args):
             )
         )
     else:
+        from utils.custom_logit_processor import RepetitionPenaltyLogitsProcessor
+        if args.repeat_penalty > 1:
+            rep_processor = RepetitionPenaltyLogitsProcessor(penalty=args.repeat_penalty)
+            logit_processors.append(rep_processor)
         gen_kwargs.update(dict(num_beams=args.num_beams))
 
-    generate_without_watermark = partial(model.generate, **gen_kwargs)
+    generate_without_watermark = partial(model.generate,
+                                         logits_processor=LogitsProcessorList(logit_processors),
+                                         **gen_kwargs)
+    w_watermark_logit_processors = logit_processors.copy()
+    w_watermark_logit_processors.append(watermark_processor)
     generate_with_watermark = partial(
-        model.generate, logits_processor=LogitsProcessorList([watermark_processor]), **gen_kwargs
+        model.generate, logits_processor=w_watermark_logit_processors, **gen_kwargs
     )
 
     # construct the collator
@@ -511,6 +518,12 @@ if __name__ == "__main__":
         type=int,
         default=1,
         help="The number of beams to use where '1' is no beam search.",
+    )
+    parser.add_argument(
+        "--repeat_penalty",
+        type=float,
+        default=1.5,
+        help="Penalty term for greedy decoding. 1 means no penalty",
     )
     parser.add_argument(
         "--generation_seed",
