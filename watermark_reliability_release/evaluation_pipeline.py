@@ -194,7 +194,7 @@ def main(args):
     if not args_dict.get("use_position_prf"):
         args.use_position_prf = False
     if not args_dict.get("code_length"):
-        args.code_length = args.message_length
+        args.code_length = args.code_length
     if not args_dict.get("use_fixed_position"):
         args.use_fixed_position = False
     ###########################################################################

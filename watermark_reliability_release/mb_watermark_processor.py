@@ -69,7 +69,7 @@ class WatermarkBase:
         ### Parameters for multi-bit watermarking ###
         self.original_msg_length = message_length
         self.message_length = max(message_length, code_length)
-        decimal = int("1" * message_length, 2)
+        decimal = int("1" * self.message_length, 2)
         self.converted_msg_length = len(self._numberToBase(decimal, base))
 
         # if message bit width is leq to 2, no need to increase base
@@ -566,15 +566,15 @@ class WatermarkDetector(WatermarkBase):
         # compute bit accuracy
         best_prediction = list_decoded_msg[0]
         correct_bits, total_bits, error_pos = self._compute_ber(best_prediction, gold_message)
-        prediction_results = {'confidence': [], 'random': []}
+        prediction_results = {'confidence': [0], 'random': [0]}
         # for our list decoded msg
-        for msg in list_decoded_msg:
-            cb, tb, _ = self._compute_ber(msg, gold_message)
-            prediction_results['confidence'].append(cb)
-        # for random list decoded msg
-        for msg in ran_list_decoded_msg:
-            cb, tb, _ = self._compute_ber(msg, gold_message)
-            prediction_results['random'].append(cb)
+        # for msg in list_decoded_msg:
+        #     cb, tb, _ = self._compute_ber(msg, gold_message)
+        #     prediction_results['confidence'].append(cb)
+        # # for random list decoded msg
+        # for msg in ran_list_decoded_msg:
+        #     cb, tb, _ = self._compute_ber(msg, gold_message)
+        #     prediction_results['random'].append(cb)
 
         # for debugging
         if False:
@@ -788,12 +788,14 @@ class WatermarkDetector(WatermarkBase):
         random.shuffle(confidence_per_pos)
         # confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])
         random_prediction_list = [msg_prediction]
-        for idx in range(num_candidates):
-            cand_msg = msg_prediction.copy()
-            _, max_idx, next_idx, pos = confidence_per_pos[idx]
-            cand_msg[pos - 1] = next_idx
-            random_prediction_list.append(cand_msg)
-
+        try:
+            for idx in range(min(num_candidates, len(confidence_per_pos))):
+                cand_msg = msg_prediction.copy()
+                _, max_idx, next_idx, pos = confidence_per_pos[idx]
+                cand_msg[pos - 1] = next_idx
+                random_prediction_list.append(cand_msg)
+        except:
+            breakpoint()
         # sort by the least confident positions
         confidence_per_pos = sorted(confidence_per_pos, key=lambda x: x[0])[:num_candidate_position]
         msg_prediction_list = [msg_prediction]
@@ -1075,13 +1077,33 @@ class WatermarkDetector(WatermarkBase):
         binary_pred = format(decimal, f"0{self.message_length}b")
         use_ecc = False
         if use_ecc:
-            rm = reedmuller.ReedMuller(2, 5)
-            decoded = rm.decode(list(map(int, binary_pred)))
-            print(decoded)
-            if decoded:
-                binary_pred = ''.join(map(str, decoded))
-            else:
-                binary_pred = binary_pred[:self.original_msg_length]
+            from pyldpc import make_ldpc, decode, get_message, encode
+            n = 24
+            d_v = 7
+            d_c = 12
+            seed = np.random.RandomState(42)
+            H, G = make_ldpc(n, d_v, d_c, seed=seed, systematic=True, sparse=True)
+            ldpc_receieved_code = []
+            for bp in binary_pred:
+                if bp == "1":
+                    ldpc_receieved_code.append(1)
+                else:
+                    ldpc_receieved_code.append(-1)
+            variance = 0.001
+            noise = np.random.normal(0, variance, size=len(ldpc_receieved_code))
+            ldpc_receieved_code = np.array(ldpc_receieved_code) + noise
+            snr = -10 * np.log10(variance)
+            d = decode(H, ldpc_receieved_code, snr, maxiter=1000)
+            decoded = get_message(G, d)
+            # breakpoint()
+            # rm = reedmuller.ReedMuller(2, 5)
+            # decoded = rm.decode(list(map(int, binary_pred)))
+            # if decoded:
+            #     binary_pred = ''.join(map(str, decoded))
+            # else:
+            #     binary_pred = binary_pred[:self.original_msg_length]
+            # binary_pred = decoded[:self.original_msg_length]
+            binary_pred = "".join(list(map(str, decoded)))
 
         # predicted binary message may be longer because the last chunk was right-padded
         if len(binary_pred) != len(message):
@@ -1093,6 +1115,7 @@ class WatermarkDetector(WatermarkBase):
         match = 0
         total = 0
         error_pos = []
+        # print(message)
         for pos, (g, p) in enumerate(zip(message, binary_pred)):
             if g == p:
                 match += 1
