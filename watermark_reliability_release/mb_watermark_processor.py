@@ -1075,7 +1075,7 @@ class WatermarkDetector(WatermarkBase):
         decimal = int(pred_msg, self.base)
         decimal = min(decimal, 2 ** self.message_length - 1)
         binary_pred = format(decimal, f"0{self.message_length}b")
-        use_ecc = False
+        use_ecc = True
         if use_ecc:
             from pyldpc import make_ldpc, decode, get_message, encode
             n = 24
