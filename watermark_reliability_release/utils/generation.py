@@ -473,7 +473,7 @@ def generate(
         msg_binary = "0"
         msg_encoded = "0"
     else:
-        use_ecc = True
+        use_ecc = False
         msg_binary, msg_encoded = sample_message(msg_length, use_ecc)
         # msg_binary = msg_encoded = msg_length * "0"
 
@@ -543,30 +543,12 @@ try:
 except:
     print("Error loading error correcting code module")
 
-from pyldpc import make_ldpc, decode, get_message, encode
-import numpy as np
-
 def sample_message(msg_length, use_ecc, ecc_params=None):
     msg_decimal = random.getrandbits(msg_length)
     msg_binary = format(msg_decimal, f"0{msg_length}b")
     if use_ecc:
-        n = 24
-        d_v = 7
-        d_c = 12
-        seed = np.random.RandomState(42)
-        H, G = make_ldpc(n, d_v, d_c, seed=seed, systematic=True, sparse=True)
-        v = np.array(list(map(int, msg_binary)))
-        snr = 1000
-        y = encode(G, v, snr, seed=seed)
-        msg_encoded = []
-        for y_ in y:
-            if y_ > 0:
-                msg_encoded.append(1)
-            else:
-                msg_encoded.append(0)
-        msg_encoded = "".join(map(str, msg_encoded))
-        # rm = reedmuller.ReedMuller(2, 5)
-        # msg_encoded = ''.join(map(str, rm.encode(list(map(int, msg_binary)))))
+        rm = reedmuller.ReedMuller(2, 5)
+        msg_encoded = ''.join(map(str, rm.encode(list(map(int, msg_binary)))))
     else:
         msg_encoded = msg_binary
 

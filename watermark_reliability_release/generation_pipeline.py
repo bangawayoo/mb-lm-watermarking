@@ -157,7 +157,7 @@ def main(args):
     wm_kwargs = {
             'use_position_prf': args.use_position_prf,
             'use_fixed_position': args.use_fixed_position,
-            'code_length': args.code_length,
+            'code_length': args.message_length,
             'use_feedback': args.use_feedback,
             'feedback_args': {'eta': args.feedback_eta,
                               'tau': args.feedback_tau,

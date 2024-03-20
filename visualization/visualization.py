@@ -13,7 +13,7 @@ from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 # rc('font', **{'family': 'serif', 'serif': ['Computer Modern'], 'size': 13})
 rc('font', **{'family': 'serif', 'serif': ['cmr10']})
 rc('lines', linewidth=5)
-page_width = 6.32
+page_width = 5
 wd = "./visualization/"
 
 def parse_strings(strings):
@@ -321,9 +321,10 @@ fig.savefig("delta-vs-quality.pdf")
 
 ## main: clean
 ratio = 1
-# page_width = 5
+page_width = 5
 width = page_width * ratio
 height = width / 3.2
+
 
 main_mean, main_std = parse_strings(".986 (0.06)	.951 (.07)	.900 (.09)	.871 (0.08)")
 r2_mean, r2_std = parse_strings(".966 (.07)	.905 (.08)	.858 (.08)	0.820 (.08)")
@@ -331,7 +332,7 @@ r2g2_mean, r2g2_std = parse_strings(".978 (.05)	.922 (.07)	.875 (.08)	0.849 (.07
 data_mean = [main_mean, r2_mean, r2g2_mean]
 data_std = [main_std, r2_std, r2g2_std]
 labels = ["$\gamma=0.25,r=4$", "$\gamma=0.25,r=2$", "$\gamma=0.5,r=2$"]
-list_decoded_mean = [.986, .951, .900, .871]
+list_decoded_mean = [.997, .988, .959, .927]
 
 fig, ax = plt.subplots(1, 2)
 
@@ -343,17 +344,12 @@ multiplier = 0
 
 num_groups = 3
 cm = plt.cm.viridis
-cm = plt.cm.inferno
-
-colors = [cm(x) for x in np.linspace(0, 0.7, num_groups)]
-hatches = ['', '.', '-']
+colors = [cm(x) for x in np.linspace(0.2, 1, num_groups)]
 
 for idx in range(num_groups):
     offset = bar_width * multiplier
     rects = ax[0].bar(x + offset, data_mean[idx], bar_width, yerr=data_std[idx] / np.sqrt(500) * 3,
-                   label=labels[idx], color=colors[idx], error_kw={'elinewidth': 1}, capsize=2, hatch=hatches[idx],
-                      alpha=0.8
-                      )
+                   label=labels[idx], color=colors[idx], error_kw={'elinewidth': 1}, capsize=2)
     multiplier += 1
 
 multiplier = 0
@@ -362,7 +358,7 @@ offset = bar_width * multiplier
 #     ax.text(x[ix] - 0.07, data_mean[0][ix] + 0.01, "*")
 
 rects = ax[0].bar(x + offset, list_decoded_mean, bar_width, color="None", edgecolor=colors[0],
-               label="16-List decoded", alpha=0.5)
+               label="16-List decoded", linewidth=0.75)
 
 ax[0].yaxis.set_minor_locator(AutoMinorLocator(4))
 # ax.yaxis.set_minor_locator(AutoMinorLocator(4))
@@ -371,27 +367,25 @@ ax[0].set_ylabel("Bit Acc.")
 ax[0].grid(axis='y')
 ax[0].set_xticks(x + bar_width, ["8b", "16b", "24b", "32b"])
 plt.text(0.25, 0.025, "250T",  transform=plt.gcf().transFigure)
-ax[0].legend(prop={'size': 6}, ncols=4, bbox_to_anchor=(1.1, 1.2), loc="center", handleheight=2,
-             handlelength=3)
+ax[0].legend(prop={'size': 6}, ncols=4, bbox_to_anchor=(0.15, 1.05), loc="lower left")
 
 
 acc_mean, acc_std = parse_strings(".846 (.09)	0.913 (.08)	.951 (.07)	.958 (.09)")
 acc_mean = acc_mean[::-1]
 acc_std = acc_std[::-1]
 x = np.arange(len(acc_mean))
-ax[1].bar(x, acc_mean, bar_width, color=colors[0], alpha=0.8)
+ax[1].bar(x, acc_mean, bar_width, color=colors[0])
 
 list_decoded_mean, _ = parse_strings(".876 (.08)	.954 (.06)	.999 (.03)	.992 (.04)")
 list_decoded_mean = list_decoded_mean[::-1]
 
-# print((acc_mean - list_decoded_mean).mean())
-ax[1].bar(x, list_decoded_mean, bar_width, color="None", edgecolor=colors[0], linewidth=0.75,
-          alpha=0.7)
+print((acc_mean - list_decoded_mean).mean())
+ax[1].bar(x, list_decoded_mean, bar_width, color="None", edgecolor=colors[0], linewidth=0.75)
 
 x_labels = ['8b\n125T', '16b\n250T', '32b\n500T', '64b\n1000T']
 ax[1].set_xticks(ticks=x, labels=x_labels)
-ax[1].set_ylim(0.5, 1)
-ax[0].set_ylim(0.5, 1)
+ax[1].set_ylim(0.8, 1)
+ax[0].set_ylim(0.8, 1)
 
 for ax_ in ax:
     ax_.yaxis.set_minor_locator(AutoMinorLocator(4))
@@ -400,164 +394,7 @@ for ax_ in ax:
 plt.subplots_adjust(left=0.1, bottom=0.25, right=0.95, top=0.8, wspace=.2, hspace=0.)
 plt.show()
 fig.set_size_inches(width, height, forward=True)
-fig.savefig("./visualization/main-clean.pdf")
-
-
-## main: comparison with others
-ratio = 0.8
-width = page_width * ratio
-height = width / 2.5
-bar_plot_args = {'error_kw':{'elinewidth': 0.5}, 'capsize': 1}
-
-
-main_mean, main_std = parse_strings(".986 (0.06)	.981 (.07)	.956 (.10)	.900 (.13)")
-cs_green_mean, cs_green_std = parse_strings(".995 (.05)	.988 (.08)	.970 (.12)	.908 (.20)")
-cs_ems_mean, cs_ems_std = parse_strings(".979 (.10)	.943 (.17)	.858 (.24)	.800 (.28)")
-msg_hash_mean, msg_hash_std = parse_strings(".977 (.11)	.973 (.12)	.951 (.16)	.858 (.24)")
-
-data_mean = [main_mean, cs_green_mean, cs_ems_mean, msg_hash_mean]
-data_std = [main_std, cs_green_std, cs_ems_std, msg_hash_std]
-labels = ["MPAC", "CS (Greenlist)", "CS (EMS)", "MSG-HASH"]
-
-fig, ax = plt.subplots(1, 3)
-
-N = 4
-x = np.arange(N)
-
-bar_width = 0.15
-multiplier = 0
-
-num_groups = 4
-cm = plt.cm.viridis
-colors = [cm(x) for x in np.linspace(0.2, 1, num_groups)]
-
-for idx in range(num_groups):
-    offset = bar_width * multiplier
-    rects = ax[0].bar(x + offset, data_mean[idx], bar_width, yerr=data_std[idx] / np.sqrt(500) * 3,
-                   label=labels[idx], color=colors[idx], **bar_plot_args)
-    multiplier += 1
-
-multiplier = 0
-offset = bar_width * multiplier
-# for ix in range(1, len(x)):
-#     ax[0].text(x[ix] - 0.07, data_mean[0][ix] + 0.01, "*")
-
-# second plot
-main_mean, main_std = parse_strings(".951 (.07)	.939 (.08)	.887 (.09)	.819 (.12)")
-cs_green_mean, cs_green_std = parse_strings(".01 (.01)	.01 (.01)	.01 (.01)	.01 (.01)")
-cs_ems_mean, cs_ems_std = parse_strings(".905 (.20)	.811 (.26)	0.702 (.26)	.601 (.23)")
-msg_hash_mean, msg_hash_std = parse_strings(".936 (.18)	.909 (.20)	.810 (.26)	.614 (.22)")
-
-data_mean = [main_mean, cs_green_mean, cs_ems_mean, msg_hash_mean]
-data_std = [main_std, cs_green_std, cs_ems_std, msg_hash_std]
-
-
-N = 4
-x = np.arange(N)
-
-bar_width = 0.15
-multiplier = 0
-
-num_groups = 4
-cm = plt.cm.viridis
-colors = [cm(x) for x in np.linspace(0.2, 1, num_groups)]
-
-for idx in range(num_groups):
-    offset = bar_width * multiplier
-    rects = ax[1].bar(x + offset, data_mean[idx], bar_width, yerr=data_std[idx] / np.sqrt(500) * 3,
-                   label=labels[idx], color=colors[idx], **bar_plot_args)
-    multiplier += 1
-
-multiplier = 0
-
-# third plot
-main_mean, main_std = parse_strings(".899 (.09)	.882 (.09)	.830 (.10)	.755 (.11)")
-cs_green_mean, cs_green_std = parse_strings(".01 (.01)	.01 (.01)	.01 (.01)	.01 (.01)")
-cs_ems_mean, cs_ems_std = parse_strings(".775 (.26)	.729 (.24)	.633 (.23)	.513 (.13)")
-msg_hash_mean, msg_hash_std = parse_strings(".876 (.22)	.828 (.25)	.663 (.26)	.516 (.16)")
-
-data_mean = [main_mean, cs_green_mean, cs_ems_mean, msg_hash_mean]
-data_std = [main_std, cs_green_std, cs_ems_std, msg_hash_std]
-
-
-N = 4
-x = np.arange(N)
-
-bar_width = 0.15
-multiplier = 0
-
-num_groups = 4
-cm = plt.cm.viridis
-colors = [cm(x) for x in np.linspace(0.2, 1, num_groups)]
-num_samples = [500, 100, 500, 500]
-for idx in range(num_groups):
-    offset = bar_width * multiplier
-    rects = ax[2].bar(x + offset, data_mean[idx], bar_width, yerr=data_std[idx] / np.sqrt(num_samples[idx]) * 3,
-                   label=labels[idx], color=colors[idx], **bar_plot_args)
-    multiplier += 1
-
-multiplier = 0
-
-
-
-
-for ax_ in ax:
-    ax_.yaxis.set_minor_locator(AutoMinorLocator(4))
-    # ax.yaxis.set_minor_locator(AutoMinorLocator(4))
-    ax_.set_ylim(0.5, 1)
-    ax_.grid(which="major", linewidth=0.3, axis="y")
-    ax_.grid(which="minor", linewidth=0.25, linestyle="--", axis="y",)
-
-    ax_.set_xticks(x + bar_width, ["Clean", "10%", "30%", "50%"])
-
-labels = [item.get_text() for item in ax[1].get_yticklabels()]
-
-ax[1].set_yticklabels([" "]*len(labels))
-ax[2].set_yticklabels([" "]*len(labels))
-ax[0].set_xlabel("8b")
-ax[1].set_xlabel("16b")
-ax[2].set_xlabel("24b")
-ax[0].legend(prop={'size': 7}, ncols=4, bbox_to_anchor=(0.2, 1.05), loc="lower left")
-ax[0].set_ylabel("Bit Acc.")
-plt.subplots_adjust(left=0.12, bottom=0.3, right=0.98, top=0.8, wspace=.05, hspace=0.)
-fig.set_size_inches(width, height, forward=True)
-plt.show()
-fig.savefig("./visualization/main-comparison.pdf")
-
-##
-width = page_width * 0.2
-# height = width * 2
-# height = page_width * 0.3
-
-# height = width / 1
-fig, ax = plt.subplots(1,1)
-cm = plt.cm.viridis
-colors = [cm(x) for x in np.linspace(0.2, 1, 3)]
-
-ours = [0.986, .974, 0.96, .951]
-cs = [0.977, 0.957, 0.917]
-msg_hash = [0.98, 0.9, 0.678]
-x_axis = [1e-2, 1e-3, 1e-4, 1e-5]
-x_axis = np.arange(len(ours))
-labels = ['MPAC', "C-SHIFT", "MSG-HASH"]
-for idx, data in enumerate([ours, cs, msg_hash]):
-    ax.plot(x_axis[:len(data)], data, c=colors[idx], linewidth=2, label=labels[idx], marker=".")
-
-ax.plot(x_axis[-2:], [.917, .877], marker=".", linestyle="dotted", linewidth=2, c=colors[1])
-ax.plot(x_axis[-2:], [.678, .456], marker=".", linestyle="dotted", linewidth=2, c=colors[2])
-
-ax.set_xticks(x_axis, ["1E-2", "1E-3", "1E-4", "1E-5"])
-# ax.set_xscale('log')
-ax.set_xlabel('FPR')
-ax.set_ylabel('TPR')
-ax.set_ylim(0.6, 1.0)
-
-# ax.legend(prop={'size': 6}, ncols=1, loc="best")
-plt.subplots_adjust(left=0.3, bottom=0.3, right=0.9, top=0.95)
-fig.set_size_inches(width, height)
-plt.show()
-fig.savefig("./visualization/tpr-at-fpr.pdf")
-
+fig.savefig("./main-clean.pdf")
 
 ## robustness : cp
 ratio = 0.8
