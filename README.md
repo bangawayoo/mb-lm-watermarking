@@ -1,7 +1,7 @@
-# [Advancing Beyond Identification: 0️⃣0️⃣1️⃣0️⃣1️⃣1️⃣  Multi-bit Watermark for Large Language Models](https://arxiv.org/abs/2301.10226) 
+# [Advancing Beyond Identification: 0️⃣0️⃣1️⃣0️⃣1️⃣1️⃣  Multi-bit Watermark for Large Language Models (NAACL24)](https://arxiv.org/abs/2301.10226) 
 
 
-### [Paper](https://openreview.net/pdf?id=KOTsHW6mBI)
+### [Paper](https://arxiv.org/abs/2308.00221)
 
 Official implementation of multi-bit watermarking and detection algorithms in the paper:
 
@@ -23,6 +23,9 @@ How do we go beyond mere identification and embed the outputs with other meta-da
 tracing back to the adversary user? Our work proposes a simple and 
 effective scheme to embed **M**ulti-bit information during generation through **P**osition **A**llocation (**MPAC**).     
 
+<p align="center">
+  <img src="figures/flow-diagram.png">
+</p>
 
 ### Repository Overview
 Most of our multi-bit implementation is done in `./watermark_reliability_release/mb_watermark_processor.py`, 
@@ -50,8 +53,13 @@ greenlist proportion (`$\gamma$`).
 
 ![image](figures/overview.png)
 
+
 If you are unfamiliar with zero-bit watermarking (Kirchenbauer et al. 2023), we suggest you read the preliminary of our paper.
 For a review of the configurations (e.g.`$\gamma$`, hashing scheme), checkout the below configuration section.
+
+Below is an illustration of how using Position Allocation differs from existing multi-bit approach.
+
+![image](figures/overview-comparison.png)
 
 ### Key configurations
 Specific to multi-bit watermarking
