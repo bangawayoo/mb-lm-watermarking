@@ -10,7 +10,7 @@ export WANDB=T
 
 ### Experiment type ###
 export RUN_GEN=T; export RUN_ATT=F; export RUN_EVAL=T; export DEBUG=T;
-export LIMIT_ROWS=-1
+export LIMIT_ROWS=10000
 
 
 ### Generation ###
