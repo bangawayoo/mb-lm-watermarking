@@ -1,4 +1,4 @@
-# [Advancing Beyond Identification: 0️⃣0️⃣1️⃣0️⃣1️⃣1️⃣  Multi-bit Watermark for Large Language Models (NAACL24)](https://arxiv.org/abs/2301.10226) 
+# [Advancing Beyond Identification: 0️⃣0️⃣1️⃣0️⃣1️⃣1️⃣  Multi-bit Watermark for Large Language Models (NAACL24)](https://arxiv.org/abs/2308.00221) 
 
 
 ### [Paper](https://arxiv.org/abs/2308.00221)
